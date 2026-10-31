@@ -81,8 +81,10 @@ data class PadLayout(
     val dpadStyle: DPadStyle = DPadStyle.COMBO,
 
     /**
-     * 扳机弱加载区占控件高度的比例。按上去算抓住了扳机，但输出恒为 0，
-     * 手指挪进滑块才开始走行程 —— 手指有宽度，直接按滑块往往一按就是 10%。
+     * 扳机弱加载区的圆，直径占**控件宽度**的比例。
+     *
+     * 按上去算抓住了扳机，但输出恒为 0；手指挪进滑块才开始走行程 —— 手指有宽度，
+     * 直接按滑块往往一按就是 10%。滑块本身比控件窄一截，圆才能比它大。
      */
     val triggerGate: Float = DEFAULT_TRIGGER_GATE,
 ) {
@@ -94,8 +96,10 @@ data class PadLayout(
      * 放在数据模型上而不是渲染层：摆位时要靠它算占屏幕多大，测试也要用它验证有没有重叠。
      */
     fun aspectOf(kind: PadElementKind): Float = when (kind) {
+        // 滑动条：滑块本身 2.4 个宽，上方再挂一个直径 triggerGate 个宽的圆。
+        // 两者谁也不占对方的尺寸，所以直接相加。
         PadElementKind.TRIGGER_LEFT, PadElementKind.TRIGGER_RIGHT ->
-            if (triggerStyle == TriggerStyle.SLIDE) 2.4f * (1f + triggerGate) else 0.64f
+            if (triggerStyle == TriggerStyle.SLIDE) 2.4f + triggerGate else 0.64f
 
         PadElementKind.SHOULDER_LEFT, PadElementKind.SHOULDER_RIGHT -> 0.64f
         else -> 1f
@@ -150,9 +154,15 @@ data class PadLayout(
         const val MIN_SIZE = 0.05f
         const val MAX_SIZE = 0.45f
 
-        /** 弱加载区比例的默认值与上限。 */
-        const val DEFAULT_TRIGGER_GATE = 0.4f
-        const val MAX_TRIGGER_GATE = 0.65f
+        /**
+         * 弱加载区圆的直径 / 控件宽度。
+         *
+         * 下限跟滑块宽度对齐（滑块占控件宽度的 62%），所以圆最小也不比滑块窄；
+         * 上限 100% 就是控件自身宽度 —— 再大就画出去了，画出界的部分触摸命不中。
+         */
+        const val MIN_TRIGGER_GATE = 0.62f
+        const val DEFAULT_TRIGGER_GATE = 0.8f
+        const val MAX_TRIGGER_GATE = 1f
 
         /**
          * 默认布局。刻意写成文本而不是 Kotlin 构造：用户调好导出一段文本发回来，
@@ -218,7 +228,7 @@ sub,DPAD,E,0.33,0.0,0.33,true
                         dpad = DPadStyle.entries.firstOrNull { it.name == parts[1] } ?: dpad
 
                     parts[0] == "gate" && parts.size == 2 ->
-                        gate = parts[1].toFloatOrNull()?.coerceIn(0f, MAX_TRIGGER_GATE) ?: gate
+                        gate = parts[1].toFloatOrNull()?.coerceIn(MIN_TRIGGER_GATE, MAX_TRIGGER_GATE) ?: gate
 
                     parts[0] == "sub" && parts.size >= 6 -> {
                         val kind = PadElementKind.entries.firstOrNull { it.name == parts[1] } ?: return@forEach

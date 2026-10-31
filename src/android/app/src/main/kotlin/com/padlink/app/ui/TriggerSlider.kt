@@ -25,13 +25,15 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.min
+import com.padlink.app.layout.PadLayout
 
-/** 弱加载区相对**滑块高度**的默认比例。 */
-private const val DefaultGate = 0.4f
-
-/** 再大判定区就该喧宾夺主了。 */
-private const val MaxGate = 0.65f
+/**
+ * 滑块宽度占控件宽度的比例。
+ *
+ * 特意留出余量：弱加载区的圆最宽可以到控件宽度，滑块只有 62%，圆才比滑块明显大一圈。
+ * 如果滑块也占满宽度，圆最多只能和它一样宽，那就白做了。
+ */
+private const val SliderWidthRatio = 0.62f
 
 private const val Accent = 0xFF4C8DFF.toInt()
 
@@ -42,16 +44,18 @@ private const val Accent = 0xFF4C8DFF.toInt()
  * 才开始按位置换算。这样不用一开始就把手指精确按在 0 位上——手指有宽度，直接按滑块
  * 往往一按就已经是 10% 了，从头走满 0→100 根本做不到。
  *
- * 它是**额外加在滑块上方**的一块：滑块那一截的高度和行程跟原来一模一样，
- * 多出来的高度由 [PadLayout.aspectOf] 算进去。
+ * 尺寸关系（控件宽 W、高 H）：
+ * - 圆直径 = W × gate，取值 0.62 ~ 1.0，所以圆的直径和判定区高度**始终相等**，圆底正好贴着滑块顶
+ * - 滑块高 = H − 圆直径，也就是原来的 2.4W，一点没被占
+ * - 滑块宽 = W × 0.62，居中
  *
- * 下方是原来的滑块：填充跟着手指走，蓝色从顶部按比例盖下来。
+ * 圆的直径封顶在控件宽度：Canvas 画得出界，但触摸命不中界外，画出界就成了"看得见按不到"。
  */
 @Composable
 fun TriggerSlider(
     modifier: Modifier = Modifier,
     label: String = "",
-    gate: Float = DefaultGate,
+    gate: Float = PadLayout.DEFAULT_TRIGGER_GATE,
     onChange: (Float) -> Unit = {},
 ) {
     var value by remember { mutableFloatStateOf(0f) }
@@ -81,15 +85,13 @@ fun TriggerSlider(
                     val down = awaitFirstDown()
                     pressed = true
 
-                    val gateFraction = gate.coerceIn(0f, MaxGate)
-                    // 控件总高 = 滑块（原高）+ 判定区。先把滑块那截还原出来。
-                    val sliderHeight = (size.height / (1f + gateFraction)).coerceAtLeast(1f)
-                    val gateHeight = size.height - sliderHeight
-                    // 圆比判定区高的时候会压到滑块上，所以判定按“圆内”算，而不是按 y 分界。
-                    val radius = min(size.width.toFloat(), gateHeight) / 2f   // 和绘制保持一致
+                    val gateFraction = gate.coerceIn(PadLayout.MIN_TRIGGER_GATE, PadLayout.MAX_TRIGGER_GATE)
+                    val gateHeight = (size.width * gateFraction).coerceAtMost(size.width.toFloat())
+                    val sliderHeight = (size.height - gateHeight).coerceAtLeast(1f)
+                    val radius = (size.width * gateFraction / 2f).coerceAtMost(size.width / 2f)
 
                     fun track(position: Offset) {
-                        // 弱加载区里：算按下，但值恒为 0；进了滑块才按位置换算。
+                        // 圆内算弱加载区：抓住扳机但值为 0。圆外才按位置换算。
                         val dx = position.x - size.width / 2f
                         val dy = position.y - gateHeight / 2f
                         value = if (dx * dx + dy * dy <= radius * radius) {
@@ -119,13 +121,16 @@ fun TriggerSlider(
                 }
             },
         ) {
-            val gateFraction = gate.coerceIn(0f, MaxGate)
-            val sliderHeight = size.height / (1f + gateFraction)
-            val gateHeight = size.height - sliderHeight
+            val gateFraction = gate.coerceIn(PadLayout.MIN_TRIGGER_GATE, PadLayout.MAX_TRIGGER_GATE)
+            val gateDiameter = size.width * gateFraction
+            val gateHeight = gateDiameter          // 判定区高度 = 圆直径，圆底正好贴滑块顶
+            val sliderHeight = size.height - gateHeight
+            val sliderWidth = size.width * SliderWidthRatio
+            val barLeft = (size.width - sliderWidth) / 2f
             val outline = size.width * 0.09f
 
             // 弱加载区：一个圆，按上去有反馈但不产生行程。
-            val radius = min(size.width, gateHeight) / 2f   // 不能超出控件：画得出界，但触摸命不中
+            val radius = gateDiameter / 2f
             val gateCenter = Offset(size.width / 2f, gateHeight / 2f)
             drawCircle(color = gateFill, radius = radius, center = gateCenter)
             drawCircle(
@@ -135,14 +140,14 @@ fun TriggerSlider(
                 style = Stroke(width = outline),
             )
 
-            // 滑块本体：高度是原来的，没被判定区吃掉。
-            val corner = CornerRadius(size.width * 0.28f)
+            // 滑块本体：比控件窄，高度是原来的 2.4 个宽，没被判定区吃掉。
+            val corner = CornerRadius(sliderWidth * 0.28f)
             val barTop = gateHeight
-            val barSize = Size(size.width, sliderHeight)
+            val barSize = Size(sliderWidth, sliderHeight)
 
             drawRoundRect(
                 color = Color(0xFF2C2C2C),
-                topLeft = Offset(0f, barTop),
+                topLeft = Offset(barLeft, barTop),
                 size = barSize,
                 cornerRadius = corner,
             )
@@ -150,15 +155,15 @@ fun TriggerSlider(
             if (value > 0f) {
                 drawRoundRect(
                     color = Color(Accent),
-                    topLeft = Offset(0f, barTop),
-                    size = Size(size.width, sliderHeight * value),
+                    topLeft = Offset(barLeft, barTop),
+                    size = Size(sliderWidth, sliderHeight * value),
                     cornerRadius = corner,
                 )
             }
 
             drawRoundRect(
                 color = barStroke,
-                topLeft = Offset(0f, barTop),
+                topLeft = Offset(barLeft, barTop),
                 size = barSize,
                 cornerRadius = corner,
                 style = Stroke(width = outline),

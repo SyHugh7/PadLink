@@ -155,13 +155,13 @@ class PadLayoutTest {
         val original = PadLayout.Default.copy(
             triggerStyle = TriggerStyle.BUTTON,
             dpadStyle = DPadStyle.TRIANGLE,
-            triggerGate = 0.55f,
+            triggerGate = 0.9f,
         )
 
         val restored = PadLayout.decode(original.encode())
 
         assertEquals(TriggerStyle.BUTTON, restored.triggerStyle)
         assertEquals(DPadStyle.TRIANGLE, restored.dpadStyle)
-        assertEquals(0.55f, restored.triggerGate, 1e-4f)
+        assertEquals(0.9f, restored.triggerGate, 1e-4f)
     }
 }

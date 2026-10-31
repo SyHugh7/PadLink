@@ -205,7 +205,7 @@ fun AppSettingsDialog(
                     Slider(
                         value = draft.triggerGate,
                         onValueChange = { draft = draft.copy(triggerGate = it) },
-                        valueRange = 0f..PadLayout.MAX_TRIGGER_GATE,
+                        valueRange = PadLayout.MIN_TRIGGER_GATE..PadLayout.MAX_TRIGGER_GATE,
                     )
                 }
 
