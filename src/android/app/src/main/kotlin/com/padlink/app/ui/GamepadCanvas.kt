@@ -244,7 +244,10 @@ private fun ElementContent(element: PadElement, layout: PadLayout, controller: P
     val input = controller.input
 
     when (element.kind) {
-        PadElementKind.LEFT_STICK -> StickPad(Modifier.fillMaxSize()) { x, y ->
+        PadElementKind.LEFT_STICK -> StickPad(
+            modifier = Modifier.fillMaxSize(),
+            onEngaged = { input.setStickEngaged(it) },
+        ) { x, y ->
             input.setLeftStick(x, y)
             controller.push()
         }

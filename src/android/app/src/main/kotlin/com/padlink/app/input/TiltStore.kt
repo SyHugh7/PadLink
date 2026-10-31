@@ -20,6 +20,7 @@ class TiltStore(context: Context) {
             maxAngleDeg = prefs.getFloat(KEY_MAX_ANGLE, defaults.maxAngleDeg),
             curve = prefs.getFloat(KEY_CURVE, defaults.curve),
             smoothing = prefs.getFloat(KEY_SMOOTHING, defaults.smoothing),
+            stickHoldSec = prefs.getFloat(KEY_STICK_HOLD, defaults.stickHoldSec),
         )
     }
 
@@ -33,6 +34,7 @@ class TiltStore(context: Context) {
             .putFloat(KEY_MAX_ANGLE, settings.maxAngleDeg)
             .putFloat(KEY_CURVE, settings.curve)
             .putFloat(KEY_SMOOTHING, settings.smoothing)
+            .putFloat(KEY_STICK_HOLD, settings.stickHoldSec)
             .commit()
     }
 
@@ -56,6 +58,7 @@ class TiltStore(context: Context) {
         const val KEY_MAX_ANGLE = "maxAngleDeg"
         const val KEY_CURVE = "curve"
         const val KEY_SMOOTHING = "smoothing"
+        const val KEY_STICK_HOLD = "stickHoldSec"
         const val KEY_ENABLED = "enabled"
         const val KEY_ZERO_RAD = "zeroRad"
     }

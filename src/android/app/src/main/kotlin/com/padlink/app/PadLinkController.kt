@@ -49,12 +49,17 @@ class PadLinkController(
     var tiltSettings by mutableStateOf(tiltStore.loadSettings())
         private set
 
+    /** 摇杆松手后重力等多久再接管（毫秒）。传感器线程每帧都读，别在那儿算乘法。 */
+    
+    private var tiltHoldMs = 0L
+
     val tiltAvailable: Boolean get() = tilt.isAvailable
 
     init {
         tilt.settings = tiltSettings
+        tiltHoldMs = (tiltSettings.stickHoldSec * 1000f).toLong()
         tilt.onTilt = { value ->
-            input.setTiltX(value)
+            input.setTiltX(value, tiltHoldMs)
             push()
         }
         tilt.onZeroChanged = { rad -> tiltStore.saveZeroRad(rad) }
@@ -162,14 +167,13 @@ class PadLinkController(
         if (next == tiltEnabled) return
 
         tiltEnabled = next
-        input.tiltOwnsLeftX = next
         tiltStore.saveEnabled(next)
 
         if (next) {
             tilt.start(tiltStore.loadZeroRad())
         } else {
             tilt.stop()
-            input.setTiltX(0f)   // 别把摇杆留在最后那个位置上
+            input.leftX = 0f     // 别把摇杆留在最后那个位置上（关闭时不走延时）
         }
         push()
     }
@@ -186,6 +190,7 @@ class PadLinkController(
     fun applyTiltSettings(settings: TiltSettings, persist: Boolean) {
         tiltSettings = settings
         tilt.settings = settings
+        tiltHoldMs = (settings.stickHoldSec * 1000f).toLong()
         if (persist) tiltStore.saveSettings(settings)
     }
 

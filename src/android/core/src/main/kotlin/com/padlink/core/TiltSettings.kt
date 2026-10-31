@@ -24,4 +24,11 @@ data class TiltSettings(
 
     /** 低通系数。越小越平顺但越滞后；太大摇杆会跟着手的抖一起抖。 */
     val smoothing: Float = 0.25f,
+
+    /**
+     * 松开左摇杆后多少秒重力才重新接管 X。0 = 立刻还回去。
+     *
+     * 摇杆永远优先于重力：摸一下就接管，松手后等这么久再让重力回来。
+     */
+    val stickHoldSec: Float = 0f,
 )

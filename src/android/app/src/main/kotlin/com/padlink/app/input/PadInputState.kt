@@ -1,5 +1,6 @@
 package com.padlink.app.input
 
+import android.os.SystemClock
 import com.padlink.core.AxisRange
 import com.padlink.core.ControllerType
 import com.padlink.core.DPad
@@ -13,8 +14,9 @@ import kotlin.math.roundToInt
  * 屏幕 y 向下为正，协议 y 向上为正（protocol.md §5.4）。
  * 别在 UI 里到处取反，那样迟早有一处漏了，表现就是"上下颠倒"。
  *
- * 也是全项目唯一做**输入源仲裁**的地方：触摸和重力都想写左摇杆 X，而字段是裸
- * `@Volatile`，同时写就是谁后写谁赢。规则见 [tiltOwnsLeftX]。
+ * 也是全项目唯一做**输入源仲裁**的地方：触摸摇杆和重力都想写左摇杆 X，而字段是裸
+ * `@Volatile`，同时写就是谁后写谁赢。规则是**摇杆优先**：手一摸上去就接管，
+ * 松开后再等 [setTiltX] 的 `holdMs`，重力才回来。
  */
 class PadInputState(
     private val controller: ControllerType = ControllerType.XBOX360,
@@ -34,24 +36,32 @@ class PadInputState(
     @Volatile var leftTrigger = 0f
     @Volatile var rightTrigger = 0f
 
-    /**
-     * 重力转向接管左摇杆 X 轴。
-     *
-     * 挂 `@Volatile` 字段本身不带归属，两个输入源同时写一个字段只会互相覆盖——
-     * 表现是抖一下，或者某个源"冻住"。所以开重力时，触摸摇杆不去碰 X。
-     * 这是取舍不是 bug：两个源管同一个轴，怎么混合都得先问玩家想不想要。
-     */
-    @Volatile
-    var tiltOwnsLeftX = false
+    /** 左摇杆是不是正被按着。 */
+    @Volatile private var stickEngaged = false
 
-    /** 左摇杆的触摸回调（屏幕坐标）。重力接管 X 时，这里只写 Y。 */
+    /** 最后一次松开左摇杆的时刻（uptimeMillis）。重力靠它算还要等多久。 */
+    @Volatile private var stickReleasedAt = 0L
+
+    /** 左摇杆按下 / 松开。松开要记时间，重力才知道该等多久再接管。 */
+    fun setStickEngaged(engaged: Boolean) {
+        stickEngaged = engaged
+        if (!engaged) stickReleasedAt = SystemClock.uptimeMillis()
+    }
+
+    /** 左摇杆的触摸回调（屏幕坐标）。摇杆永远优先，重力开着也照写。 */
     fun setLeftStick(x: Float, y: Float) {
-        if (!tiltOwnsLeftX) leftX = x
+        leftX = x
         leftY = y
     }
 
-    /** 重力转向解算出的左摇杆 X。和 [setLeftStick] 是同一个字段的两个来源。 */
-    fun setTiltX(value: Float) {
+    /**
+     * 重力解算出的左摇杆 X。摇杆按着、或者刚松开还不到 [holdMs]，就让位。
+     *
+     * 让位时干脆不写：留着摇杆给的值（松手通常是 0），别让重力在指头底下抢方向盘。
+     */
+    fun setTiltX(value: Float, holdMs: Long) {
+        if (stickEngaged) return
+        if (holdMs > 0 && SystemClock.uptimeMillis() - stickReleasedAt < holdMs) return
         leftX = value
     }
 

@@ -23,6 +23,7 @@ import kotlin.math.min
 @Composable
 fun StickPad(
     modifier: Modifier = Modifier,
+    onEngaged: (Boolean) -> Unit = {},
     onChange: (x: Float, y: Float) -> Unit = { _, _ -> },
 ) {
     var knob by remember { mutableStateOf(Offset.Zero) }
@@ -50,6 +51,7 @@ fun StickPad(
                         onChange(knob.x, knob.y)
                     }
 
+                    onEngaged(true)
                     track(first.position)
                     first.consume()
 
@@ -63,6 +65,7 @@ fun StickPad(
 
                     knob = Offset.Zero
                     pressed = false
+                    onEngaged(false)
                     onChange(0f, 0f)
                 }
             },

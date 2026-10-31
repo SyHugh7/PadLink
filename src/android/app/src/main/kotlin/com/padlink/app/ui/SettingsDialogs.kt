@@ -280,6 +280,15 @@ fun AppSettingsDialog(
                         onDrag = { controller.applyTiltSettings(tilt.copy(smoothing = it), persist = false) },
                         onDrop = { controller.applyTiltSettings(controller.tiltSettings, persist = true) },
                     )
+
+                    TiltSlider(
+                        label = "恢复延时",
+                        display = "%.1fs".format(tilt.stickHoldSec),
+                        value = tilt.stickHoldSec,
+                        range = 0f..3f,
+                        onDrag = { controller.applyTiltSettings(tilt.copy(stickHoldSec = it), persist = false) },
+                        onDrop = { controller.applyTiltSettings(controller.tiltSettings, persist = true) },
+                    )
                 } else {
                     Text("这台机器没有陀螺仪", color = HintColor, fontSize = 12.sp)
                 }
