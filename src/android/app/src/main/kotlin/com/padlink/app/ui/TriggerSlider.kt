@@ -18,38 +18,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.padlink.app.layout.PadLayout
 
-/**
- * 滑块宽度占控件宽度的比例。
- *
- * 特意留出余量：弱加载区的圆最宽可以到控件宽度，滑块只有 62%，圆才比滑块明显大一圈。
- * 如果滑块也占满宽度，圆最多只能和它一样宽，那就白做了。
- */
-private const val SliderWidthRatio = 0.62f
-
 private const val Accent = 0xFF4C8DFF.toInt()
 
 /**
  * 扳机·滑动条样式。
  *
- * 上方那个圆是**弱加载区**：手指按上去算抓住了扳机，但输出恒为 0；手指往下挪进滑块
- * 才开始按位置换算。这样不用一开始就把手指精确按在 0 位上——手指有宽度，直接按滑块
- * 往往一按就已经是 10% 了，从头走满 0→100 根本做不到。
+ * 就是一根圆角长条，分两段：
  *
- * 尺寸关系（控件宽 W、高 H）：
- * - 圆直径 = W × gate，取值 0.62 ~ 1.0，所以圆的直径和判定区高度**始终相等**，圆底正好贴着滑块顶
- * - 滑块高 = H − 圆直径，也就是原来的 2.4W，一点没被占
- * - 滑块宽 = W × 0.62，居中
+ * - **顶端那一段是弱加载区**（暗色）：按上去算抓住了扳机，但输出恒为 0
+ * - **下面那段是行程**（蓝色，跟着手指走）
  *
- * 圆的直径封顶在控件宽度：Canvas 画得出界，但触摸命不中界外，画出界就成了"看得见按不到"。
+ * 为什么要顶端那一段：手指有宽度，想从 0 开始往下滑，按下去的位置往往已经在 10% 以上了，
+ * 一按上就有值，从头走满 0→100 根本做不到。留一段不响应的，按在哪儿都还是 0。
+ *
+ * 长条的长和宽各自可调：宽度由元素自己的 `size` 管，长度是 `PadLayout.triggerAspect`。
  */
 @Composable
 fun TriggerSlider(
@@ -61,16 +55,11 @@ fun TriggerSlider(
     var value by remember { mutableFloatStateOf(0f) }
     var pressed by remember { mutableStateOf(false) }
 
-    // 按下去必须看得见：判定区里值恒为 0，光盯填充根本判断不出到底抓住没有。
+    // 按下去必须看得见：弱加载区里值恒为 0，光盯填充根本判断不出到底抓住没有。
     val gateFill by animateColorAsState(
-        targetValue = if (pressed) Color(0xFF313D52) else Color(0xFF232323),
+        targetValue = if (pressed) Color(0xFF3A4761) else Color(0xFF232323),
         animationSpec = tween(120),
         label = "gateFill",
-    )
-    val gateStroke by animateColorAsState(
-        targetValue = if (pressed) Color(Accent) else Color(0xFF4A4A4A),
-        animationSpec = tween(120),
-        label = "gateStroke",
     )
     val barStroke by animateColorAsState(
         targetValue = if (pressed) Color(0xFF707070) else Color(0xFF4A4A4A),
@@ -86,18 +75,15 @@ fun TriggerSlider(
                     pressed = true
 
                     val gateFraction = gate.coerceIn(PadLayout.MIN_TRIGGER_GATE, PadLayout.MAX_TRIGGER_GATE)
-                    val gateHeight = (size.width * gateFraction).coerceAtMost(size.width.toFloat())
-                    val sliderHeight = (size.height - gateHeight).coerceAtLeast(1f)
-                    val radius = (size.width * gateFraction / 2f).coerceAtMost(size.width / 2f)
+                    val gateHeight = (size.height * gateFraction).coerceIn(0f, size.height.toFloat())
+                    val travel = (size.height - gateHeight).coerceAtLeast(1f)
 
                     fun track(position: Offset) {
-                        // 圆内算弱加载区：抓住扳机但值为 0。圆外才按位置换算。
-                        val dx = position.x - size.width / 2f
-                        val dy = position.y - gateHeight / 2f
-                        value = if (dx * dx + dy * dy <= radius * radius) {
+                        // 顶端那段：算按下，但值恒为 0；过了它才按位置换算。
+                        value = if (position.y < gateHeight) {
                             0f
                         } else {
-                            ((position.y - gateHeight) / sliderHeight).coerceIn(0f, 1f)
+                            ((position.y - gateHeight) / travel).coerceIn(0f, 1f)
                         }
                         onChange(value)
                     }
@@ -122,49 +108,45 @@ fun TriggerSlider(
             },
         ) {
             val gateFraction = gate.coerceIn(PadLayout.MIN_TRIGGER_GATE, PadLayout.MAX_TRIGGER_GATE)
-            val gateDiameter = size.width * gateFraction
-            val gateHeight = gateDiameter          // 判定区高度 = 圆直径，圆底正好贴滑块顶
-            val sliderHeight = size.height - gateHeight
-            val sliderWidth = size.width * SliderWidthRatio
-            val barLeft = (size.width - sliderWidth) / 2f
+            val gateHeight = size.height * gateFraction
+            val travel = size.height - gateHeight
+            val corner = CornerRadius(size.width * 0.28f)
             val outline = size.width * 0.09f
 
-            // 弱加载区：一个圆，按上去有反馈但不产生行程。
-            val radius = gateDiameter / 2f
-            val gateCenter = Offset(size.width / 2f, gateHeight / 2f)
-            drawCircle(color = gateFill, radius = radius, center = gateCenter)
-            drawCircle(
-                color = gateStroke,
-                radius = radius,
-                center = gateCenter,
-                style = Stroke(width = outline),
-            )
+            // 整条底色
+            drawRoundRect(color = Color(0xFF2C2C2C), cornerRadius = corner)
 
-            // 滑块本体：比控件窄，高度是原来的 2.4 个宽，没被判定区吃掉。
-            val corner = CornerRadius(sliderWidth * 0.28f)
-            val barTop = gateHeight
-            val barSize = Size(sliderWidth, sliderHeight)
+            // 内容都裁到圆角里，免得顶端那段画出方角
+            val shape = Path().apply {
+                addRoundRect(RoundRect(0f, 0f, size.width, size.height, corner))
+            }
 
-            drawRoundRect(
-                color = Color(0xFF2C2C2C),
-                topLeft = Offset(barLeft, barTop),
-                size = barSize,
-                cornerRadius = corner,
-            )
+            clipPath(shape) {
+                if (gateHeight > 0f) {
+                    drawRect(color = gateFill, size = Size(size.width, gateHeight))
+                }
 
-            if (value > 0f) {
-                drawRoundRect(
-                    color = Color(Accent),
-                    topLeft = Offset(barLeft, barTop),
-                    size = Size(sliderWidth, sliderHeight * value),
-                    cornerRadius = corner,
+                if (value > 0f) {
+                    drawRect(
+                        color = Color(Accent),
+                        topLeft = Offset(0f, gateHeight),
+                        size = Size(size.width, travel * value),
+                    )
+                }
+            }
+
+            // 两段的分界
+            if (gateHeight > 0f) {
+                drawLine(
+                    color = Color(0xFF4A4A4A),
+                    start = Offset(0f, gateHeight),
+                    end = Offset(size.width, gateHeight),
+                    strokeWidth = outline * 0.6f,
                 )
             }
 
             drawRoundRect(
                 color = barStroke,
-                topLeft = Offset(barLeft, barTop),
-                size = barSize,
                 cornerRadius = corner,
                 style = Stroke(width = outline),
             )

@@ -207,6 +207,13 @@ fun AppSettingsDialog(
                         onValueChange = { draft = draft.copy(triggerGate = it) },
                         valueRange = PadLayout.MIN_TRIGGER_GATE..PadLayout.MAX_TRIGGER_GATE,
                     )
+
+                    Text("长度", color = HintColor, fontSize = 12.sp)
+                    Slider(
+                        value = draft.triggerAspect,
+                        onValueChange = { draft = draft.copy(triggerAspect = it) },
+                        valueRange = PadLayout.MIN_TRIGGER_ASPECT..PadLayout.MAX_TRIGGER_ASPECT,
+                    )
                 }
 
                 Text("十字键的样式", color = HintColor, fontSize = 12.sp)

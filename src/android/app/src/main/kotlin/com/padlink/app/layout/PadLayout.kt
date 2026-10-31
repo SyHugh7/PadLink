@@ -81,12 +81,15 @@ data class PadLayout(
     val dpadStyle: DPadStyle = DPadStyle.COMBO,
 
     /**
-     * 扳机弱加载区的圆，直径占**控件宽度**的比例。
+     * 扳机顶端那一段弱加载区占整条高度的比例。
      *
-     * 按上去算抓住了扳机，但输出恒为 0；手指挪进滑块才开始走行程 —— 手指有宽度，
-     * 直接按滑块往往一按就是 10%。滑块本身比控件窄一截，圆才能比它大。
+     * 按上去算抓住了扳机，但输出恒为 0；手指往下挪过这一段才开始走行程 ——
+     * 手指有宽度，直接按滑块往往一按就是 10%。
      */
     val triggerGate: Float = DEFAULT_TRIGGER_GATE,
+
+    /** 扳机的长度（高 / 宽）。宽度由 [PadElement.size] 管，这个管长度。 */
+    val triggerAspect: Float = DEFAULT_TRIGGER_ASPECT,
 ) {
     fun element(kind: PadElementKind): PadElement? = elements.firstOrNull { it.kind == kind }
 
@@ -96,10 +99,9 @@ data class PadLayout(
      * 放在数据模型上而不是渲染层：摆位时要靠它算占屏幕多大，测试也要用它验证有没有重叠。
      */
     fun aspectOf(kind: PadElementKind): Float = when (kind) {
-        // 滑动条：滑块本身 2.4 个宽，上方再挂一个直径 triggerGate 个宽的圆。
-        // 两者谁也不占对方的尺寸，所以直接相加。
+        // 滑动条：长度单独可调（默认 2.4 个宽），宽度由元素自己的 size 管。
         PadElementKind.TRIGGER_LEFT, PadElementKind.TRIGGER_RIGHT ->
-            if (triggerStyle == TriggerStyle.SLIDE) 2.4f + triggerGate else 0.64f
+            if (triggerStyle == TriggerStyle.SLIDE) triggerAspect else 0.64f
 
         PadElementKind.SHOULDER_LEFT, PadElementKind.SHOULDER_RIGHT -> 0.64f
         else -> 1f
@@ -143,6 +145,7 @@ data class PadLayout(
         appendLine("trigger=${triggerStyle.name}")
         appendLine("dpad=${dpadStyle.name}")
         appendLine("gate=$triggerGate")
+        appendLine("aspect=$triggerAspect")
         subKeys.forEach { (kind, keys) ->
             keys.forEach { key ->
                 appendLine("sub,${kind.name},${key.label},${key.dx},${key.dy},${key.scale},${key.enabled}")
@@ -154,15 +157,15 @@ data class PadLayout(
         const val MIN_SIZE = 0.05f
         const val MAX_SIZE = 0.45f
 
-        /**
-         * 弱加载区圆的直径 / 控件宽度。
-         *
-         * 下限跟滑块宽度对齐（滑块占控件宽度的 62%），所以圆最小也不比滑块窄；
-         * 上限 100% 就是控件自身宽度 —— 再大就画出去了，画出界的部分触摸命不中。
-         */
-        const val MIN_TRIGGER_GATE = 0.62f
-        const val DEFAULT_TRIGGER_GATE = 0.8f
-        const val MAX_TRIGGER_GATE = 1f
+        /** 顶端弱加载区占整条高度的比例。 */
+        const val MIN_TRIGGER_GATE = 0f
+        const val DEFAULT_TRIGGER_GATE = 0.25f
+        const val MAX_TRIGGER_GATE = 0.6f
+
+        /** 扳机的长度（高 / 宽）。默认 2.4 就是原来那根细长条。 */
+        const val MIN_TRIGGER_ASPECT = 1f
+        const val DEFAULT_TRIGGER_ASPECT = 2.4f
+        const val MAX_TRIGGER_ASPECT = 6f
 
         /**
          * 默认布局。刻意写成文本而不是 Kotlin 构造：用户调好导出一段文本发回来，
@@ -211,6 +214,7 @@ sub,DPAD,E,0.33,0.0,0.33,true
             var trigger = TriggerStyle.SLIDE
             var dpad = DPadStyle.COMBO
             var gate = DEFAULT_TRIGGER_GATE
+            var aspect = DEFAULT_TRIGGER_ASPECT
 
             text.lineSequence().forEach { rawLine ->
                 val line = rawLine.trim()
@@ -229,6 +233,9 @@ sub,DPAD,E,0.33,0.0,0.33,true
 
                     parts[0] == "gate" && parts.size == 2 ->
                         gate = parts[1].toFloatOrNull()?.coerceIn(MIN_TRIGGER_GATE, MAX_TRIGGER_GATE) ?: gate
+
+                    parts[0] == "aspect" && parts.size == 2 ->
+                        aspect = parts[1].toFloatOrNull()?.coerceIn(MIN_TRIGGER_ASPECT, MAX_TRIGGER_ASPECT) ?: aspect
 
                     parts[0] == "sub" && parts.size >= 6 -> {
                         val kind = PadElementKind.entries.firstOrNull { it.name == parts[1] } ?: return@forEach
@@ -253,7 +260,7 @@ sub,DPAD,E,0.33,0.0,0.33,true
                 }
             }
 
-            return PadLayout(elements, subKeys, trigger, dpad, gate)
+            return PadLayout(elements, subKeys, trigger, dpad, gate, aspect)
         }
 
         val Default: PadLayout = parse(DEFAULT_TEXT)
