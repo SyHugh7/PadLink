@@ -205,7 +205,10 @@ sub,DPAD,E,0.33,0.0,0.33,true
             text.lineSequence().forEach { rawLine ->
                 val line = rawLine.trim()
                 if (line.isEmpty() || line.startsWith("#")) return@forEach
-                val parts = line.split(',')
+                // 两种键值写法都认：老导出是 "trigger,SLIDE"，后来改成了 "trigger=SLIDE"。
+                // 之前只按逗号切，"trigger=SLIDE" 整行会变成一个 token，永远匹配不上 ——
+                // 于是样式和 gate 一导出就丢，读回来永远是默认值。
+                val parts = line.replace('=', ',').split(',')
 
                 when {
                     parts[0] == "trigger" && parts.size == 2 ->

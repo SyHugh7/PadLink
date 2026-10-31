@@ -147,4 +147,21 @@ class PadLayoutTest {
         val spun = PadLayout.Default.rotate(PadElementKind.TRIGGER_LEFT, 270f)
         assertEquals(-90f, spun.element(PadElementKind.TRIGGER_LEFT)!!.rotation, 0.0001f)
     }
+
+    @Test
+    fun `触发器与十字键的样式、弱加载区都能往返`() {
+        // 曾经 encode 写的是 "trigger=BUTTON"，而 parse 只认 "trigger,BUTTON"，
+        // 那一整行被当成一个 token，于是这几个设置一导出就丢，读回来永远是默认值。
+        val original = PadLayout.Default.copy(
+            triggerStyle = TriggerStyle.BUTTON,
+            dpadStyle = DPadStyle.TRIANGLE,
+            triggerGate = 0.55f,
+        )
+
+        val restored = PadLayout.decode(original.encode())
+
+        assertEquals(TriggerStyle.BUTTON, restored.triggerStyle)
+        assertEquals(DPadStyle.TRIANGLE, restored.dpadStyle)
+        assertEquals(0.55f, restored.triggerGate, 1e-4f)
+    }
 }
