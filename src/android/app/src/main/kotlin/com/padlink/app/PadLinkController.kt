@@ -15,6 +15,7 @@ import com.padlink.core.TiltSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -74,6 +75,7 @@ class PadLinkController(
 
     private var pump: FramePump? = null
     private var statsJob: Job? = null
+    private var retryJob: Job? = null
 
     val isConnected: Boolean get() = status is LinkStatus.Connected
 
@@ -107,17 +109,37 @@ class PadLinkController(
                 }
                 .onFailure { failure ->
                     status = LinkStatus.Failed(failure.message ?: failure.javaClass.simpleName)
+                    scheduleAdbRetry()
                 }
         }
     }
 
     fun disconnect() {
+        retryJob?.cancel()
+        retryJob = null
+
         statsJob?.cancel()
         statsJob = null
         pump?.stop()
         pump = null
         status = LinkStatus.Idle
         stats = PumpStats()
+    }
+
+    /**
+     * ADB 模式下连不上就隔两秒再试。
+     *
+     * PC 端那边可能是刚插上线、隧道才建好；手机端要是试一次就躺平，用户还是得手动点
+     * 「连接」——那就谈不上自动了。WiFi 模式不重试：IP 填错了会一直打。
+     */
+    private fun scheduleAdbRetry() {
+        if (mode != TransportMode.ADB) return
+        if (retryJob?.isActive == true) return
+
+        retryJob = scope.launch {
+            delay(2000)
+            if (!isConnected) connect()
+        }
     }
 
     /** 界面改过 [input] 之后调一次，把最新状态交给发送循环。 */

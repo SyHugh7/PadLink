@@ -23,6 +23,7 @@ public sealed class PadLinkHost : IDisposable
     private CancellationTokenSource? _cts;
     private readonly List<Task> _loops = [];
     private string? _adbPath;               // 我们自己建的隧道，退出时要拆掉
+    private string? _adb;                   // 找到的 adb 路径，缓存着别每 3 秒起一个进程
     private bool _disposed;
 
     /// <param name="tcpPort">ADB 模式用的 TCP 端口；传 null 就只用 UDP。</param>
@@ -69,6 +70,9 @@ public sealed class PadLinkHost : IDisposable
 
     public bool AdbModeAvailable => _tcpServer is not null;
 
+    /// <summary>隧道现在通不通。拔了线会被后台巡检改回 false。</summary>
+    public bool AdbTunnelUp => _adbPath is not null;
+
     public string BackendName => _backend.Name;
 
     public bool IsRunning => _cts is not null;
@@ -94,7 +98,10 @@ public sealed class PadLinkHost : IDisposable
         _loops.Add(Task.Run(() => _udpServer.RunAsync(token), token));
 
         if (_tcpServer is not null)
+        {
             _loops.Add(Task.Run(() => _tcpServer.RunAsync(token), token));
+            _loops.Add(Task.Run(() => WatchAdbAsync(token), token));
+        }
 
         _loops.Add(Task.Run(async () =>
         {
@@ -134,6 +141,51 @@ public sealed class PadLinkHost : IDisposable
         var (ok, message) = AdbTunnel.EstablishReverse(adb, TcpPort);
         if (ok) _adbPath = adb;                 // 记住是谁建的，退出时要拆
         return (ok, ok ? $"隧道已建立（{devices[0]} → localhost:{TcpPort}）" : message);
+    }
+
+    /// <summary>
+    /// 盯着 USB：插上线就自动把隧道建起来，拔了自动清状态等下一次。
+    ///
+    /// ADB 是这个项目的主力通道，但没人会每次记得去点「ADB 隧道」—— 插上线就该自己通。
+    /// 用轮询而不是监听 USB 事件：WMI 那套在不同机器上行为不一致，3 秒一次 adb devices 的开销可以忽略。
+    /// </summary>
+    private async Task WatchAdbAsync(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                _adb ??= AdbTunnel.FindAdb();
+                if (_adb is null) continue;
+
+                var devices = AdbTunnel.ListDevices(_adb);
+
+                if (devices.Count == 0)
+                {
+                    if (_adbPath is not null)
+                    {
+                        _adbPath = null;
+                        Console.WriteLine("ADB 设备已断开，隧道失效");
+                    }
+
+                    continue;
+                }
+
+                if (_adbPath is not null) continue;      // 已经通了，别重复建
+
+                var (ok, _) = AdbTunnel.EstablishReverse(_adb, TcpPort);
+                if (!ok) continue;                        // 授权弹窗还没点是常态，不吵
+
+                _adbPath = _adb;
+                Console.WriteLine($"ADB 隧道已建立：{devices[0]} → localhost:{TcpPort}");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 正常停止
+        }
     }
 
     public void Dispose()
