@@ -85,10 +85,14 @@ fun TriggerSlider(
                     // 控件总高 = 滑块（原高）+ 判定区。先把滑块那截还原出来。
                     val sliderHeight = (size.height / (1f + gateFraction)).coerceAtLeast(1f)
                     val gateHeight = size.height - sliderHeight
+                    // 圆比判定区高的时候会压到滑块上，所以判定按“圆内”算，而不是按 y 分界。
+                    val radius = min(size.width.toFloat(), gateHeight)
 
                     fun track(position: Offset) {
                         // 弱加载区里：算按下，但值恒为 0；进了滑块才按位置换算。
-                        value = if (position.y < gateHeight) {
+                        val dx = position.x - size.width / 2f
+                        val dy = position.y - gateHeight / 2f
+                        value = if (dx * dx + dy * dy <= radius * radius) {
                             0f
                         } else {
                             ((position.y - gateHeight) / sliderHeight).coerceIn(0f, 1f)
@@ -121,7 +125,7 @@ fun TriggerSlider(
             val outline = size.width * 0.09f
 
             // 弱加载区：一个圆，按上去有反馈但不产生行程。
-            val radius = min(size.width, gateHeight) / 2f
+            val radius = min(size.width, gateHeight)
             val gateCenter = Offset(size.width / 2f, gateHeight / 2f)
             drawCircle(color = gateFill, radius = radius, center = gateCenter)
             drawCircle(
