@@ -208,6 +208,16 @@ fun AppSettingsDialog(
                         valueRange = PadLayout.MIN_TRIGGER_GATE..PadLayout.MAX_TRIGGER_GATE,
                     )
 
+                    Text("宽度", color = HintColor, fontSize = 12.sp)
+                    Slider(
+                        value = draft.element(PadElementKind.TRIGGER_LEFT)?.size ?: 0.06f,
+                        onValueChange = {
+                            draft = draft.resize(PadElementKind.TRIGGER_LEFT, it)
+                                .resize(PadElementKind.TRIGGER_RIGHT, it)
+                        },
+                        valueRange = PadLayout.MIN_SIZE..0.2f,
+                    )
+
                     Text("长度", color = HintColor, fontSize = 12.sp)
                     Slider(
                         value = draft.triggerAspect,
