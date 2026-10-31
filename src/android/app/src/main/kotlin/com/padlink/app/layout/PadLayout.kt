@@ -79,6 +79,12 @@ data class PadLayout(
     val subKeys: Map<PadElementKind, List<SubKey>> = emptyMap(),
     val triggerStyle: TriggerStyle = TriggerStyle.SLIDE,
     val dpadStyle: DPadStyle = DPadStyle.COMBO,
+
+    /**
+     * 扳机弱加载区占控件高度的比例。按上去算抓住了扳机，但输出恒为 0，
+     * 手指挪进滑块才开始走行程 —— 手指有宽度，直接按滑块往往一按就是 10%。
+     */
+    val triggerGate: Float = DEFAULT_TRIGGER_GATE,
 ) {
     fun element(kind: PadElementKind): PadElement? = elements.firstOrNull { it.kind == kind }
 
@@ -132,6 +138,7 @@ data class PadLayout(
         }
         appendLine("trigger=${triggerStyle.name}")
         appendLine("dpad=${dpadStyle.name}")
+        appendLine("gate=$triggerGate")
         subKeys.forEach { (kind, keys) ->
             keys.forEach { key ->
                 appendLine("sub,${kind.name},${key.label},${key.dx},${key.dy},${key.scale},${key.enabled}")
@@ -142,6 +149,10 @@ data class PadLayout(
     companion object {
         const val MIN_SIZE = 0.05f
         const val MAX_SIZE = 0.45f
+
+        /** 弱加载区比例的默认值与上限。 */
+        const val DEFAULT_TRIGGER_GATE = 0.4f
+        const val MAX_TRIGGER_GATE = 0.65f
 
         /**
          * 默认布局。刻意写成文本而不是 Kotlin 构造：用户调好导出一段文本发回来，
@@ -189,6 +200,7 @@ sub,DPAD,E,0.33,0.0,0.33,true
             val subKeys = mutableMapOf<PadElementKind, MutableList<SubKey>>()
             var trigger = TriggerStyle.SLIDE
             var dpad = DPadStyle.COMBO
+            var gate = DEFAULT_TRIGGER_GATE
 
             text.lineSequence().forEach { rawLine ->
                 val line = rawLine.trim()
@@ -201,6 +213,9 @@ sub,DPAD,E,0.33,0.0,0.33,true
 
                     parts[0] == "dpad" && parts.size == 2 ->
                         dpad = DPadStyle.entries.firstOrNull { it.name == parts[1] } ?: dpad
+
+                    parts[0] == "gate" && parts.size == 2 ->
+                        gate = parts[1].toFloatOrNull()?.coerceIn(0f, MAX_TRIGGER_GATE) ?: gate
 
                     parts[0] == "sub" && parts.size >= 6 -> {
                         val kind = PadElementKind.entries.firstOrNull { it.name == parts[1] } ?: return@forEach
@@ -225,7 +240,7 @@ sub,DPAD,E,0.33,0.0,0.33,true
                 }
             }
 
-            return PadLayout(elements, subKeys, trigger, dpad)
+            return PadLayout(elements, subKeys, trigger, dpad, gate)
         }
 
         val Default: PadLayout = parse(DEFAULT_TEXT)

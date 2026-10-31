@@ -522,7 +522,7 @@ private fun SubKeyOutline(key: SubKey, selected: Boolean) {
 @Composable
 private fun TriggerOrButton(layout: PadLayout, label: String, modifier: Modifier, onChange: (Float) -> Unit) {
     when (layout.triggerStyle) {
-        TriggerStyle.SLIDE -> TriggerSlider(modifier, label, onChange)
+        TriggerStyle.SLIDE -> TriggerSlider(modifier, label, layout.triggerGate, onChange)
         TriggerStyle.BUTTON -> PadRectButton(label, modifier) { down -> onChange(if (down) 1f else 0f) }
     }
 }

@@ -200,6 +200,15 @@ fun AppSettingsDialog(
                     )
                 }
 
+                if (draft.triggerStyle == TriggerStyle.SLIDE) {
+                    Text("弱加载区", color = HintColor, fontSize = 12.sp)
+                    Slider(
+                        value = draft.triggerGate,
+                        onValueChange = { draft = draft.copy(triggerGate = it) },
+                        valueRange = 0f..PadLayout.MAX_TRIGGER_GATE,
+                    )
+                }
+
                 Text("十字键的样式", color = HintColor, fontSize = 12.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
