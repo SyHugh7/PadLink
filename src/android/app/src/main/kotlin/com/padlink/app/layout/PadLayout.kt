@@ -95,7 +95,7 @@ data class PadLayout(
      */
     fun aspectOf(kind: PadElementKind): Float = when (kind) {
         PadElementKind.TRIGGER_LEFT, PadElementKind.TRIGGER_RIGHT ->
-            if (triggerStyle == TriggerStyle.SLIDE) 2.4f else 0.64f
+            if (triggerStyle == TriggerStyle.SLIDE) 2.4f * (1f + triggerGate) else 0.64f
 
         PadElementKind.SHOULDER_LEFT, PadElementKind.SHOULDER_RIGHT -> 0.64f
         else -> 1f
