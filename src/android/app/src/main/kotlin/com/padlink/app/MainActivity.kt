@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -134,6 +135,9 @@ private fun PadLinkApp(app: PadLinkApplication) {
                 selection = null
                 // 编辑过程中每次拖动都已经存过了，这里不用再存。
             },
+            // 画布是后加的兄弟节点，会盖在顶栏上面；编辑时顶栏必须抬到最高层，
+            // 否则右上角那几个按钮会被手柄控件挡住、点不到。
+            modifier = Modifier.zIndex(1f),
         )
 
         GamepadCanvas(

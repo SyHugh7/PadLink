@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -116,7 +118,8 @@ fun ExpandableRow(
     }
 }
 
-/** 一行单选 chip。[labels] 与 [values] 一一对应。 */
+/** 一行单选 chip。[labels] 与 [values] 一一对应。放不下时自动换行。 */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun <T> ChipRow(
     values: List<T>,
@@ -124,9 +127,10 @@ fun <T> ChipRow(
     label: (T) -> String,
     onSelect: (T) -> Unit,
 ) {
-    Row(
+    FlowRow(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         values.forEach { value ->
             FilterChip(

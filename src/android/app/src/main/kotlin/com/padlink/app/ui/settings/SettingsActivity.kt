@@ -1,21 +1,36 @@
 package com.padlink.app.ui.settings
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.padlink.app.PadLinkApplication
@@ -27,7 +42,27 @@ import com.padlink.app.pref.AccentColor
 import com.padlink.app.pref.ThemeMode
 import com.padlink.app.ui.theme.PadLinkTheme
 
-/** 设置页。跟主界面分属两个 Activity，状态都在 [PadLinkApplication] 里共享。 */
+/** Material 的 arrow_outward 图标：material-icons-core 里没有，按同一路径自绘。 */
+private val ArrowOutward: ImageVector = ImageVector.Builder(
+    name = "ArrowOutward",
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 24f,
+    viewportHeight = 24f,
+).apply {
+    path(fill = SolidColor(Color.Black)) {
+        moveTo(6f, 18f)
+        lineTo(17f, 7f)
+        lineTo(9f, 7f)
+        lineTo(9f, 5f)
+        lineTo(20f, 5f)
+        lineTo(20f, 16f)
+        lineTo(18f, 16f)
+        lineTo(18f, 8f)
+        lineTo(7f, 19f)
+        close()
+    }
+}.build()
 class SettingsActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
@@ -56,6 +91,20 @@ private fun SettingsPage(app: PadLinkApplication, onBack: () -> Unit) {
     val prefs = app.prefs
     val controller = app.controller
     val layout = app.layout
+    val context = LocalContext.current
+    val versionName = remember {
+        runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull().orEmpty()
+    }
+
+    fun openProject() {
+        runCatching {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/SyHugh7/PadLink"))
+            )
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -280,6 +329,40 @@ private fun SettingsPage(app: PadLinkApplication, onBack: () -> Unit) {
                         else -> null
                     },
                 )
+            }
+
+            SettingsGroup("关于") {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+                    Text("PadLink $versionName", fontSize = 14.sp)
+                    Text(
+                        text = "syhugh7",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp,
+                    )
+                }
+
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { openProject() }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("前往项目", fontSize = 14.sp)
+                        Text(
+                            text = "给项目点个 Star 吧！这是对我最大的鼓励",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp,
+                        )
+                    }
+                    Icon(
+                        imageVector = ArrowOutward,
+                        contentDescription = "前往项目",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
 
             // 底部留白，最后一项别贴着屏幕边

@@ -81,6 +81,19 @@ private fun accentScheme(seed: Color, dark: Boolean): ColorScheme {
     val onTertiaryContainer = hsl(tertiaryHue, s * 0.30f, if (dark) 0.92f else 0.18f)
 
     val base = if (dark) darkColorScheme() else lightColorScheme()
+
+    // 背景也跟着主题色走：只留一点点色相（6%–10% 饱和），
+    // 否则「蓝/紫/绿/橙/粉」五个预设会共用同一套灰色底，看起来像没生效。
+    fun surface(lightness: Float, saturation: Float = if (dark) 0.065f else 0.080f) =
+        hsl(hue, saturation, lightness)
+
+    val onSurface = if (dark) hsl(hue, 0.030f, 0.930f) else hsl(hue, 0.100f, 0.120f)
+    val onSurfaceVariant = if (dark) hsl(hue, 0.040f, 0.780f) else hsl(hue, 0.060f, 0.340f)
+    val outline = if (dark) hsl(hue, 0.050f, 0.580f) else hsl(hue, 0.060f, 0.500f)
+    val outlineVariant = if (dark) hsl(hue, 0.050f, 0.320f) else hsl(hue, 0.100f, 0.780f)
+    val inverseSurface = if (dark) hsl(hue, 0.030f, 0.920f) else hsl(hue, 0.080f, 0.200f)
+    val inverseOnSurface = if (dark) hsl(hue, 0.040f, 0.120f) else hsl(hue, 0.050f, 0.940f)
+
     return base.copy(
         primary = primary,
         onPrimary = onPrimary,
@@ -96,6 +109,23 @@ private fun accentScheme(seed: Color, dark: Boolean): ColorScheme {
         tertiaryContainer = tertiaryContainer,
         onTertiaryContainer = onTertiaryContainer,
         surfaceTint = primary,
+        background = if (dark) surface(0.055f) else surface(0.985f),
+        onBackground = onSurface,
+        surface = if (dark) surface(0.060f) else surface(0.980f),
+        onSurface = onSurface,
+        surfaceVariant = if (dark) surface(0.200f) else surface(0.900f),
+        onSurfaceVariant = onSurfaceVariant,
+        inverseSurface = inverseSurface,
+        inverseOnSurface = inverseOnSurface,
+        outline = outline,
+        outlineVariant = outlineVariant,
+        surfaceBright = if (dark) surface(0.260f, 0.055f) else surface(0.995f),
+        surfaceDim = if (dark) surface(0.100f) else surface(0.870f, 0.070f),
+        surfaceContainerLowest = if (dark) surface(0.035f) else surface(1.0f),
+        surfaceContainerLow = if (dark) surface(0.075f) else surface(0.965f),
+        surfaceContainer = if (dark) surface(0.100f) else surface(0.945f),
+        surfaceContainerHigh = if (dark) surface(0.130f, 0.060f) else surface(0.925f),
+        surfaceContainerHighest = if (dark) surface(0.170f, 0.055f) else surface(0.900f),
     )
 }
 
