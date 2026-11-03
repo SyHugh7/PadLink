@@ -18,8 +18,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -81,13 +79,10 @@ private fun PadLinkApp(app: PadLinkApplication) {
     val controller = app.controller
     val layout = app.layout
 
-    // 按下反馈：设置里关掉就不响。
-    val haptic = LocalHapticFeedback.current
-    LaunchedEffect(haptic) {
+    // 按下反馈：直接驱动马达。系统「触感反馈」关着也能响，不依赖 performHapticFeedback。
+    LaunchedEffect(Unit) {
         controller.onHaptic = {
-            if (app.prefs.hapticFeedback) {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-            }
+            if (app.prefs.hapticFeedback) app.haptics.tick()
         }
     }
 

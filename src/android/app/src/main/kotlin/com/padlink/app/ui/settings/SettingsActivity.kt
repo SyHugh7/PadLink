@@ -236,7 +236,10 @@ private fun SettingsPage(app: PadLinkApplication, onBack: () -> Unit) {
                     SwitchRow(
                         label = "按钮按下反馈",
                         checked = prefs.hapticFeedback,
-                        onChange = { prefs.hapticFeedback = it },
+                        onChange = {
+                            prefs.hapticFeedback = it
+                            if (it) app.haptics.tick()
+                        },
                     )
                 }
 

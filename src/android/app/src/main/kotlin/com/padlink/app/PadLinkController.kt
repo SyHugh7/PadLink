@@ -152,7 +152,7 @@ class PadLinkController(
         pump?.pending = input.toFrame()
     }
 
-    /** 按下反馈交给界面层（Compose 的 LocalHapticFeedback），这层只管在按钮按下时叫一声。 */
+    /** 按下反馈交给界面层（直接驱动马达），这层只管在按钮按下时叫一声。 */
     var onHaptic: (() -> Unit)? = null
 
     fun setButton(bit: Int, pressed: Boolean) {

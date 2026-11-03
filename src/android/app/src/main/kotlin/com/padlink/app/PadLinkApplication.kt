@@ -24,6 +24,9 @@ class PadLinkApplication : Application() {
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
+    /** 按键反馈。直接驱动马达，不依赖系统触感开关。 */
+    val haptics: Haptics by lazy { Haptics(this) }
+
     lateinit var controller: PadLinkController
         private set
 
