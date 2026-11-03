@@ -65,6 +65,20 @@ class PadInputState(
         leftX = value
     }
 
+    /** 全部回零。退出前台时用：别让 PC 端卡在最后一个状态上。 */
+    fun reset() {
+        leftX = 0f
+        leftY = 0f
+        rightX = 0f
+        rightY = 0f
+        buttons = 0
+        dpad = DPad.NEUTRAL
+        leftTrigger = 0f
+        rightTrigger = 0f
+        stickEngaged = false
+        stickReleasedAt = 0L
+    }
+
     fun toFrame(): InputFrame = InputFrame(
         controller = controller,
         player = player,

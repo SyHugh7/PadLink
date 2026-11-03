@@ -1,5 +1,6 @@
 package com.padlink.app
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -9,33 +10,30 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
-import com.padlink.app.input.TiltSource
-import com.padlink.app.input.TiltStore
-import com.padlink.app.layout.LayoutStore
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.padlink.app.layout.PadLayout
-import com.padlink.app.ui.AppSettingsDialog
 import com.padlink.app.ui.ConfirmDialog
 import com.padlink.app.ui.ElementSettingsDialog
 import com.padlink.app.ui.ExportDialog
 import com.padlink.app.ui.GamepadCanvas
+import com.padlink.app.ui.QuickPanel
 import com.padlink.app.ui.Selection
 import com.padlink.app.ui.TopBar
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
+import com.padlink.app.ui.settings.SettingsActivity
+import com.padlink.app.ui.theme.PadLinkTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,57 +48,90 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
-                PadLinkApp()
+            val app = application as PadLinkApplication
+            PadLinkTheme(app.prefs) {
+                PadLinkApp(app)
             }
         }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // 切走时主动归零，别让 PC 端还顶着油门。
+        val app = application as PadLinkApplication
+        if (app.prefs.freezeOnBackground) app.controller.freezeInput()
+    }
+
+    override fun onDestroy() {
+        // 真退出才收资源。旋转或系统重建时 controller 还要接着用 —— 它是 Application 级的。
+        if (isFinishing) (application as PadLinkApplication).controller.release()
+        super.onDestroy()
     }
 }
 
 @Composable
-private fun PadLinkApp() {
+private fun PadLinkApp(app: PadLinkApplication) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val controller = remember { PadLinkController(scope, TiltSource(context), TiltStore(context)) }
-    val store = remember { LayoutStore(context) }
+    val controller = app.controller
+    val layout = app.layout
 
-    var layout by remember { mutableStateOf(store.load()) }
+    // 按下反馈：设置里关掉就不响。
+    val haptic = LocalHapticFeedback.current
+    LaunchedEffect(haptic) {
+        controller.onHaptic = {
+            if (app.prefs.hapticFeedback) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            }
+        }
+    }
+
     var editing by remember { mutableStateOf(false) }
     var selection by remember { mutableStateOf<Selection?>(null) }
+    var showQuickPanel by remember { mutableStateOf(false) }
 
-    var showAppSettings by remember { mutableStateOf(false) }
     var elementSettings by remember { mutableStateOf<Selection?>(null) }
     var showExport by remember { mutableStateOf(false) }
     var showResetConfirm by remember { mutableStateOf(false) }
 
+    // 设置页里点了「调整布局」：那边只置个标志，回来时在这儿接上。
+    LaunchedEffect(app.pendingLayoutEdit) {
+        if (app.pendingLayoutEdit) {
+            editing = true
+            selection = null
+            app.pendingLayoutEdit = false
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF1C1C1C))
+            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 8.dp, vertical = 6.dp),
     ) {
         TopBar(
             controller = controller,
             editing = editing,
             selection = selection,
-            onOpenSettings = { showAppSettings = true },
+            onOpenSettings = { showQuickPanel = true },
             onOpenElementSettings = { selection?.let { elementSettings = it } },
             onToggleEnabled = {
-                layout = when (val current = selection) {
-                    is Selection.Element -> layout.toggleEnabled(current.kind)
-                    is Selection.Sub -> layout.updateSubKey(current.kind, current.index) {
-                        it.copy(enabled = !it.enabled)
-                    }
+                app.updateLayout(
+                    when (val current = selection) {
+                        is Selection.Element -> layout.toggleEnabled(current.kind)
+                        is Selection.Sub -> layout.updateSubKey(current.kind, current.index) {
+                            it.copy(enabled = !it.enabled)
+                        }
 
-                    null -> layout
-                }
+                        null -> layout
+                    }
+                )
             },
             onReset = { showResetConfirm = true },
             onExport = { showExport = true },
             onDone = {
                 editing = false
                 selection = null
-                store.save(layout)
+                // 编辑过程中每次拖动都已经存过了，这里不用再存。
             },
         )
 
@@ -110,27 +141,20 @@ private fun PadLinkApp() {
             editing = editing,
             selection = selection,
             onSelectionChange = { selection = it },
-            onLayoutChange = { layout = it },
+            onLayoutChange = { app.updateLayout(it) },
             modifier = Modifier.fillMaxSize(),
         )
     }
 
-    if (showAppSettings) {
-        AppSettingsDialog(
+    if (showQuickPanel) {
+        QuickPanel(
             controller = controller,
-            layout = layout,
-            onDismiss = { showAppSettings = false },
-            onApply = {
-                layout = it
-                store.save(it)
-                showAppSettings = false
-            },
-            onEnterLayoutEdit = { draft ->
-                layout = draft
-                selection = null
+            onAdjustLayout = {
                 editing = true
-                showAppSettings = false
+                selection = null
             },
+            onOpenSettings = { context.startActivity(Intent(context, SettingsActivity::class.java)) },
+            onDismiss = { showQuickPanel = false },
         )
     }
 
@@ -140,8 +164,7 @@ private fun PadLinkApp() {
             layout = layout,
             onDismiss = { elementSettings = null },
             onApply = {
-                layout = it
-                store.save(it)
+                app.updateLayout(it)
                 elementSettings = null
             },
         )
@@ -152,8 +175,7 @@ private fun PadLinkApp() {
             layout = layout,
             onDismiss = { showExport = false },
             onImport = { imported ->
-                layout = imported
-                store.save(imported)
+                app.updateLayout(imported)
                 showExport = false
             },
         )
@@ -165,21 +187,15 @@ private fun PadLinkApp() {
             message = "所有控件的位置、大小、角度都恢复默认。",
             confirmText = "重置",
             onConfirm = {
-                layout = PadLayout.Default
+                app.updateLayout(PadLayout.Default)
                 selection = null
-                store.save(PadLayout.Default)
             },
             onDismiss = { showResetConfirm = false },
         )
     }
 
-    // 退出界面就把连接和传感器都收掉，别让发送循环和传感器在后台空转。
-    DisposableEffect(Unit) {
-        onDispose { controller.release() }
-    }
-
-    // ADB 模式的地址是固定的 127.0.0.1，插着线打开就该能用，不必再点一下「连接」。
+    // ADB 模式的地址是固定的 127.0.0.1，插着线打开就该能用。
     LaunchedEffect(Unit) {
-        if (controller.mode == TransportMode.ADB) controller.connect()
+        if (controller.mode == TransportMode.ADB && !controller.isConnected) controller.connect()
     }
 }

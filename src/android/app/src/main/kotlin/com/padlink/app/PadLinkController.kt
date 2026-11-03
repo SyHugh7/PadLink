@@ -152,8 +152,23 @@ class PadLinkController(
         pump?.pending = input.toFrame()
     }
 
+    /** 按下反馈交给界面层（Compose 的 LocalHapticFeedback），这层只管在按钮按下时叫一声。 */
+    var onHaptic: (() -> Unit)? = null
+
     fun setButton(bit: Int, pressed: Boolean) {
         input.buttons = if (pressed) input.buttons or bit else input.buttons and bit.inv()
+        if (pressed) onHaptic?.invoke()
+        push()
+    }
+
+    /**
+     * 退出前台时调一次：把输入全部归零。
+     *
+     * PC 端有 300ms 的 fail-safe，但那是"连不上"的兜底；这里主动归零，
+     * 用户切走的一瞬间车就不会还顶着油门往前冲。
+     */
+    fun freezeInput() {
+        input.reset()
         push()
     }
 
