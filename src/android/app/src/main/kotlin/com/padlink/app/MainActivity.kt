@@ -82,8 +82,8 @@ private fun PadLinkApp(app: PadLinkApplication) {
 
     // 按下反馈：直接驱动马达。系统「触感反馈」关着也能响，不依赖 performHapticFeedback。
     LaunchedEffect(Unit) {
-        controller.onHaptic = {
-            if (app.prefs.hapticFeedback) app.haptics.tick()
+        controller.onHaptic = { duration ->
+            if (app.prefs.hapticFeedback) app.haptics.tick(duration)
         }
     }
 

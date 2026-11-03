@@ -29,13 +29,13 @@ class Haptics(context: Context) {
         context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
     }
 
-    /** 30ms 的短促一下。没有马达的机器直接静默返回。 */
-    fun tick() {
+    /** 短促一下。默认 30ms；八向切换和滑块强弱边界用 10ms。 */
+    fun tick(durationMs: Long = DEFAULT_DURATION_MS) {
         val motor = vibrator ?: return
         if (!motor.hasVibrator()) return
 
         runCatching {
-            val effect = VibrationEffect.createOneShot(DURATION_MS, AMPLITUDE)
+            val effect = VibrationEffect.createOneShot(durationMs, AMPLITUDE)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 val attributes = VibrationAttributes.Builder()
                     .setUsage(VibrationAttributes.USAGE_HARDWARE_FEEDBACK)
@@ -50,6 +50,7 @@ class Haptics(context: Context) {
     private companion object {
         const val TAG = "PadLinkHaptics"
         const val DURATION_MS = 30L
+        const val DEFAULT_DURATION_MS = DURATION_MS
         const val AMPLITUDE = 160
     }
 }

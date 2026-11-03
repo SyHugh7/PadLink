@@ -29,6 +29,7 @@ import kotlin.math.min
 @Composable
 fun DPadPad(
     modifier: Modifier = Modifier,
+    onHaptic: (Long) -> Unit = {},
     onDirection: (DPad) -> Unit = {},
 ) {
     var active by remember { mutableStateOf(DPad.NEUTRAL) }
@@ -42,6 +43,7 @@ fun DPadPad(
                     val down = awaitFirstDown()
                     val center = Offset(size.width / 2f, size.height / 2f)
                     val deadZone = min(size.width, size.height) * 0.16f
+                    var lastDirection = DPad.NEUTRAL
 
                     fun track(position: Offset) {
                         val dx = position.x - center.x
@@ -51,6 +53,10 @@ fun DPadPad(
                         } else {
                             // 屏幕 y 向下为正，取负换成"上为正"再算角度。
                             directionFromDegrees(Math.toDegrees(atan2(-dy.toDouble(), dx.toDouble())))
+                        }
+                        if (direction != lastDirection) {
+                            if (direction != DPad.NEUTRAL) onHaptic(10L)
+                            lastDirection = direction
                         }
                         active = direction
                         onDirection(direction)

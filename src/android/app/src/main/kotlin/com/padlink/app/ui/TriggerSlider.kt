@@ -48,6 +48,7 @@ fun TriggerSlider(
     modifier: Modifier = Modifier,
     label: String = "",
     gate: Float = PadLayout.DEFAULT_TRIGGER_GATE,
+    onHaptic: (Long) -> Unit = {},
     onChange: (Float) -> Unit = {},
 ) {
     var value by remember { mutableFloatStateOf(0f) }
@@ -77,7 +78,22 @@ fun TriggerSlider(
                     val gateHeight = (size.height * gateFraction).coerceIn(0f, size.height.toFloat())
                     val travel = (size.height - gateHeight).coerceAtLeast(1f)
 
+                    var firstSample = true
+                    var inStrong = false
+
                     fun track(position: Offset) {
+                        val strong = position.y >= gateHeight
+                        if (firstSample) {
+                            // 直接按在强加载区：30ms；按在弱加载区：10ms。
+                            onHaptic(if (strong) 30L else 10L)
+                            inStrong = strong
+                            firstSample = false
+                        } else if (strong != inStrong) {
+                            // 跨过强弱分界，两个方向都只给 10ms。
+                            onHaptic(10L)
+                            inStrong = strong
+                        }
+
                         // 顶端那段：算按下，但值恒为 0；过了它才按位置换算。
                         value = if (position.y < gateHeight) {
                             0f

@@ -152,12 +152,17 @@ class PadLinkController(
         pump?.pending = input.toFrame()
     }
 
-    /** 按下反馈交给界面层（直接驱动马达），这层只管在按钮按下时叫一声。 */
-    var onHaptic: (() -> Unit)? = null
+    /** 反馈交给界面层，时长由调用方给：普通按键/摇杆 30ms，滑块边界与八向切换 10ms。 */
+    var onHaptic: ((Long) -> Unit)? = null
+
+    /** 控件自身的按下/切换反馈。 */
+    fun haptic(durationMs: Long = 30L) {
+        onHaptic?.invoke(durationMs)
+    }
 
     fun setButton(bit: Int, pressed: Boolean) {
         input.buttons = if (pressed) input.buttons or bit else input.buttons and bit.inv()
-        if (pressed) onHaptic?.invoke()
+        if (pressed) onHaptic?.invoke(30L)
         push()
     }
 

@@ -247,20 +247,30 @@ private fun ElementContent(element: PadElement, layout: PadLayout, controller: P
     when (element.kind) {
         PadElementKind.LEFT_STICK -> StickPad(
             modifier = Modifier.fillMaxSize(),
-            onEngaged = { input.setStickEngaged(it) },
+            onEngaged = {
+                input.setStickEngaged(it)
+                // 重力转向开着时，碰左摇杆是为了让位/微调，不震；L3 仍走 setButton。
+                if (it && !controller.tiltEnabled) controller.haptic(30)
+            },
         ) { x, y ->
             input.setLeftStick(x, y)
             controller.push()
         }
 
-        PadElementKind.RIGHT_STICK -> StickPad(Modifier.fillMaxSize()) { x, y ->
+        PadElementKind.RIGHT_STICK -> StickPad(
+            Modifier.fillMaxSize(),
+            onEngaged = { if (it) controller.haptic(30) },
+        ) { x, y ->
             input.rightX = x
             input.rightY = y
             controller.push()
         }
 
         PadElementKind.DPAD -> when (layout.dpadStyle) {
-            DPadStyle.COMBO -> DPadPad(Modifier.fillMaxSize()) { direction ->
+            DPadStyle.COMBO -> DPadPad(
+                Modifier.fillMaxSize(),
+                onHaptic = { controller.haptic(it) },
+            ) { direction ->
                 input.dpad = direction
                 controller.push()
             }
@@ -275,12 +285,22 @@ private fun ElementContent(element: PadElement, layout: PadLayout, controller: P
             controller.setButton(bit, down)
         }
 
-        PadElementKind.TRIGGER_LEFT -> TriggerOrButton(layout, "LT", Modifier.fillMaxSize()) { value ->
+        PadElementKind.TRIGGER_LEFT -> TriggerOrButton(
+            layout = layout,
+            label = "LT",
+            modifier = Modifier.fillMaxSize(),
+            onHaptic = { controller.haptic(it) },
+        ) { value ->
             input.leftTrigger = value
             controller.push()
         }
 
-        PadElementKind.TRIGGER_RIGHT -> TriggerOrButton(layout, "RT", Modifier.fillMaxSize()) { value ->
+        PadElementKind.TRIGGER_RIGHT -> TriggerOrButton(
+            layout = layout,
+            label = "RT",
+            modifier = Modifier.fillMaxSize(),
+            onHaptic = { controller.haptic(it) },
+        ) { value ->
             input.rightTrigger = value
             controller.push()
         }
@@ -533,9 +553,15 @@ private fun SubKeyOutline(key: SubKey, selected: Boolean) {
 
 /** 扳机按布局里选的样式渲染。 */
 @Composable
-private fun TriggerOrButton(layout: PadLayout, label: String, modifier: Modifier, onChange: (Float) -> Unit) {
+private fun TriggerOrButton(
+    layout: PadLayout,
+    label: String,
+    modifier: Modifier,
+    onHaptic: (Long) -> Unit,
+    onChange: (Float) -> Unit,
+) {
     when (layout.triggerStyle) {
-        TriggerStyle.SLIDE -> TriggerSlider(modifier, label, layout.triggerGate, onChange)
+        TriggerStyle.SLIDE -> TriggerSlider(modifier, label, layout.triggerGate, onHaptic, onChange)
         TriggerStyle.BUTTON -> PadRectButton(label, modifier) { down -> onChange(if (down) 1f else 0f) }
     }
 }
