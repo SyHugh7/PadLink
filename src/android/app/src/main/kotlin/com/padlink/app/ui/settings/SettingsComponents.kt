@@ -151,6 +151,7 @@ fun SliderRow(
     range: ClosedFloatingPointRange<Float>,
     onDrag: (Float) -> Unit,
     onCommit: () -> Unit,
+    steps: Int = 0,
 ) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -166,6 +167,7 @@ fun SliderRow(
             onValueChange = onDrag,
             onValueChangeFinished = onCommit,
             valueRange = range,
+            steps = steps,
         )
     }
 }

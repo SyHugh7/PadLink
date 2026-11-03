@@ -84,13 +84,13 @@ fun TriggerSlider(
                     fun track(position: Offset) {
                         val strong = position.y >= gateHeight
                         if (firstSample) {
-                            // 直接按在强加载区：30ms；按在弱加载区：10ms。
-                            onHaptic(if (strong) 30L else 10L)
+                            // 直接按在强加载区：30ms；按在弱加载区：20ms。
+                            onHaptic(if (strong) 30L else 20L)
                             inStrong = strong
                             firstSample = false
                         } else if (strong != inStrong) {
-                            // 跨过强弱分界，两个方向都只给 10ms。
-                            onHaptic(10L)
+                            // 跨过强弱分界，两个方向都只给 20ms。
+                            onHaptic(20L)
                             inStrong = strong
                         }
 

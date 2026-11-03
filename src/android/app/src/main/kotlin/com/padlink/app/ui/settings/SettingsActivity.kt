@@ -290,6 +290,16 @@ private fun SettingsPage(app: PadLinkApplication, onBack: () -> Unit) {
                             if (it) app.haptics.tick()
                         },
                     )
+
+                    SliderRow(
+                        label = "震动乘区",
+                        display = "%.1f×".format(prefs.hapticScale),
+                        value = prefs.hapticScale,
+                        range = 0.5f..2f,
+                        steps = 14,
+                        onDrag = { prefs.hapticScale = it },
+                        onCommit = {},
+                    )
                 }
 
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {

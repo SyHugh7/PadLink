@@ -55,7 +55,7 @@ fun DPadPad(
                             directionFromDegrees(Math.toDegrees(atan2(-dy.toDouble(), dx.toDouble())))
                         }
                         if (direction != lastDirection) {
-                            if (direction != DPad.NEUTRAL) onHaptic(10L)
+                            if (direction != DPad.NEUTRAL) onHaptic(20L)
                             lastDirection = direction
                         }
                         active = direction

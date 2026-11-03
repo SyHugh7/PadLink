@@ -7,6 +7,8 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
+import com.padlink.app.pref.AppPrefs
+import kotlin.math.roundToLong
 
 /**
  * 按键反馈震动。
@@ -19,7 +21,7 @@ import android.util.Log
  * 马达不响。所以 33+ 显式指定 `USAGE_HARDWARE_FEEDBACK` —— 它对应「硬件反馈」强度，
  * 和触感开关无关。
  */
-class Haptics(context: Context) {
+class Haptics(context: Context, private val prefs: AppPrefs) {
 
     private val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)
@@ -29,13 +31,16 @@ class Haptics(context: Context) {
         context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
     }
 
-    /** 短促一下。默认 30ms；八向切换和滑块强弱边界用 10ms。 */
+    /** 短促一下。时长会乘上设置里的「震动乘区」，默认 30ms。 */
     fun tick(durationMs: Long = DEFAULT_DURATION_MS) {
         val motor = vibrator ?: return
         if (!motor.hasVibrator()) return
 
         runCatching {
-            val effect = VibrationEffect.createOneShot(durationMs, AMPLITUDE)
+            val duration = (durationMs * prefs.hapticScale)
+                .roundToLong()
+                .coerceIn(1L, MAX_DURATION_MS)
+            val effect = VibrationEffect.createOneShot(duration, AMPLITUDE)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 val attributes = VibrationAttributes.Builder()
                     .setUsage(VibrationAttributes.USAGE_HARDWARE_FEEDBACK)
@@ -51,6 +56,7 @@ class Haptics(context: Context) {
         const val TAG = "PadLinkHaptics"
         const val DURATION_MS = 30L
         const val DEFAULT_DURATION_MS = DURATION_MS
+        const val MAX_DURATION_MS = 200L
         const val AMPLITUDE = 160
     }
 }

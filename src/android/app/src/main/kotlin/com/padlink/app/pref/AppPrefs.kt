@@ -59,6 +59,7 @@ class AppPrefs(context: Context) {
     private var freezeState by mutableStateOf(prefs.getBoolean(KEY_FREEZE, false))
     private var statusBarState by mutableStateOf(prefs.getBoolean(KEY_STATUS_BAR, false))
     private var statusBarAppliedState by mutableStateOf(prefs.getBoolean(KEY_STATUS_BAR_APPLIED, false))
+    private var hapticScaleState by mutableStateOf(prefs.getFloat(KEY_HAPTIC_SCALE, 1f))
 
     var themeMode: ThemeMode
         get() = themeModeState
@@ -80,6 +81,14 @@ class AppPrefs(context: Context) {
         set(value) {
             hapticState = value
             prefs.edit().putBoolean(KEY_HAPTIC, value).apply()
+        }
+
+    /** 震动时长乘区，默认 1.0；所有控件的 20ms / 30ms 都乘它。 */
+    var hapticScale: Float
+        get() = hapticScaleState
+        set(value) {
+            hapticScaleState = value
+            prefs.edit().putFloat(KEY_HAPTIC_SCALE, value).apply()
         }
 
     /** 退出前台时把输入归零并停发，回到前台再恢复。 */
@@ -126,6 +135,7 @@ class AppPrefs(context: Context) {
         const val KEY_THEME_MODE = "themeMode"
         const val KEY_ACCENT = "accentColor"
         const val KEY_HAPTIC = "hapticFeedback"
+        const val KEY_HAPTIC_SCALE = "hapticScale"
         const val KEY_FREEZE = "freezeOnBackground"
         const val KEY_STATUS_BAR = "disableStatusBar"
         const val KEY_STATUS_BAR_APPLIED = "statusBarApplied"

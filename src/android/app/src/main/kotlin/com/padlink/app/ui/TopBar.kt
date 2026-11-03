@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -15,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -27,7 +29,6 @@ import com.padlink.app.PadLinkController
  */
 @Composable
 fun TopBar(
-    controller: PadLinkController,
     editing: Boolean,
     selection: Selection?,
     onOpenSettings: () -> Unit,
@@ -54,26 +55,34 @@ fun TopBar(
                 onDone = onDone,
             )
         } else {
-            IdleBar(controller, onOpenSettings)
+            IdleBar(onOpenSettings)
         }
     }
 }
 
 @Composable
-private fun RowScope.IdleBar(controller: PadLinkController, onOpenSettings: () -> Unit) {
-    val (text, color) = statusOf(controller)
-
-    // 三等分：状态在左，齿轮严格居中，重力开关在右。
-    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-        // 连不上时 message 是原始的异常文本，很长；不截断会画到右边把重力开关盖住。
-        Text(text = text, color = color, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
+private fun RowScope.IdleBar(onOpenSettings: () -> Unit) {
+    // 三等分：左边留空，齿轮严格居中，右边留空。连接状态已挪到屏幕底部。
+    Box(Modifier.weight(1f))
     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
         TextButton(onClick = onOpenSettings) { Text("设置", fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }
     }
-    // 右边留空。原来这里放重力开关，但手柄画布是画在顶栏之上的，
-    // A 键正好压在这一块，按钮既看不清也点不着。开关现在只在设置里。
     Box(Modifier.weight(1f))
+}
+
+/** 屏幕底部的连接状态。长错误信息只显示一行，超出省略。 */
+@Composable
+fun ConnectionStatus(controller: PadLinkController, modifier: Modifier = Modifier) {
+    val (text, color) = statusOf(controller)
+    Text(
+        text = text,
+        color = color,
+        fontSize = 12.sp,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        textAlign = TextAlign.Center,
+        modifier = modifier.widthIn(max = 400.dp).padding(horizontal = 24.dp),
+    )
 }
 
 @Composable

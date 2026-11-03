@@ -6,6 +6,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -16,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -25,6 +27,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.padlink.app.layout.PadLayout
 import com.padlink.app.ui.ConfirmDialog
+import com.padlink.app.ui.ConnectionStatus
 import com.padlink.app.ui.ElementSettingsDialog
 import com.padlink.app.ui.ExportDialog
 import com.padlink.app.ui.GamepadCanvas
@@ -104,50 +107,63 @@ private fun PadLinkApp(app: PadLinkApplication) {
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .background(MaterialTheme.colorScheme.background),
     ) {
-        TopBar(
-            controller = controller,
-            editing = editing,
-            selection = selection,
-            onOpenSettings = { showQuickPanel = true },
-            onOpenElementSettings = { selection?.let { elementSettings = it } },
-            onToggleEnabled = {
-                app.updateLayout(
-                    when (val current = selection) {
-                        is Selection.Element -> layout.toggleEnabled(current.kind)
-                        is Selection.Sub -> layout.updateSubKey(current.kind, current.index) {
-                            it.copy(enabled = !it.enabled)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+        ) {
+            TopBar(
+                editing = editing,
+                selection = selection,
+                onOpenSettings = { showQuickPanel = true },
+                onOpenElementSettings = { selection?.let { elementSettings = it } },
+                onToggleEnabled = {
+                    app.updateLayout(
+                        when (val current = selection) {
+                            is Selection.Element -> layout.toggleEnabled(current.kind)
+                            is Selection.Sub -> layout.updateSubKey(current.kind, current.index) {
+                                it.copy(enabled = !it.enabled)
+                            }
+
+                            null -> layout
                         }
+                    )
+                },
+                onReset = { showResetConfirm = true },
+                onExport = { showExport = true },
+                onDone = {
+                    editing = false
+                    selection = null
+                    // 编辑过程中每次拖动都已经存过了，这里不用再存。
+                },
+                // 画布是后加的兄弟节点，会盖在顶栏上面；编辑时顶栏必须抬到最高层，
+                // 否则右上角那几个按钮会被手柄控件挡住、点不到。
+                modifier = Modifier.zIndex(1f),
+            )
 
-                        null -> layout
-                    }
-                )
-            },
-            onReset = { showResetConfirm = true },
-            onExport = { showExport = true },
-            onDone = {
-                editing = false
-                selection = null
-                // 编辑过程中每次拖动都已经存过了，这里不用再存。
-            },
-            // 画布是后加的兄弟节点，会盖在顶栏上面；编辑时顶栏必须抬到最高层，
-            // 否则右上角那几个按钮会被手柄控件挡住、点不到。
-            modifier = Modifier.zIndex(1f),
-        )
+            GamepadCanvas(
+                controller = controller,
+                layout = layout,
+                editing = editing,
+                selection = selection,
+                onSelectionChange = { selection = it },
+                onLayoutChange = { app.updateLayout(it) },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
 
-        GamepadCanvas(
+        // 连接状态放屏幕底部居中，浮在画布上，长错误文本只占一行。
+        ConnectionStatus(
             controller = controller,
-            layout = layout,
-            editing = editing,
-            selection = selection,
-            onSelectionChange = { selection = it },
-            onLayoutChange = { app.updateLayout(it) },
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 10.dp)
+                .zIndex(2f),
         )
     }
 
