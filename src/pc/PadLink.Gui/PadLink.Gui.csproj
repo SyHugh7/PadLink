@@ -11,6 +11,7 @@
     <ApplicationVisualStyles>true</ApplicationVisualStyles>
     <ApplicationUseCompatibleTextRendering>false</ApplicationUseCompatibleTextRendering>
     <ApplicationIcon>padlink.ico</ApplicationIcon>
+    <Version>0.8.5</Version>
   </PropertyGroup>
 
   <ItemGroup>

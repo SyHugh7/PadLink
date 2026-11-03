@@ -1,4 +1,4 @@
-using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using PadLink.Backends.ViGEm;
 using PadLink.Core;
@@ -36,9 +36,8 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
-        _localAddress = Dns.GetHostAddresses(Dns.GetHostName())
-            .FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork)
-            ?.ToString() ?? "127.0.0.1";
+        // 不要用 Dns.GetHostAddresses(本机名)：DNS 一慢，构造函数就卡在窗口出现之前。
+        _localAddress = ResolveLocalAddress();
 
         Text = "PadLink";
         StartPosition = FormStartPosition.CenterScreen;
@@ -74,8 +73,33 @@ public sealed class MainForm : Form
         SetupTrayIcon();
 
         _refreshTimer.Tick += (_, _) => RefreshStatus();
-        Shown += (_, _) => StartServer();
+        Shown += (_, _) => BeginInvoke(new Action(StartServer));
         FormClosing += OnFormClosing;
+    }
+
+    /// <summary>取本机 IPv4 地址。枚举网卡，不查 DNS——DNS 慢起来会拖住启动。</summary>
+    private static string ResolveLocalAddress()
+    {
+        try
+        {
+            foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (nic.OperationalStatus != OperationalStatus.Up) continue;
+                if (nic.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+
+                foreach (var address in nic.GetIPProperties().UnicastAddresses)
+                {
+                    if (address.Address.AddressFamily == AddressFamily.InterNetwork)
+                        return address.Address.ToString();
+                }
+            }
+        }
+        catch (NetworkInformationException)
+        {
+            // 网卡信息读不到就退回回环地址，不影响服务绑定。
+        }
+
+        return "127.0.0.1";
     }
 
     // ------------------------------------------------------------------ 界面
@@ -374,9 +398,16 @@ public sealed class MainForm : Form
         _refreshTimer.Start();
         RefreshStatus();
 
-        // 插着线就把隧道顺手建好；没插线也不吵，日志里留一句就走。
-        var (ok, message) = _host.TryEstablishAdbTunnel();
-        Console.WriteLine(ok ? $"ADB 隧道已建立：{message}" : $"ADB 隧道未建立：{message}");
+        // ADB 探测会启动 adb 进程；adb 卡住时过去会把 UI 线程一起卡十几秒。
+        // 现在只扔到后台：隧道建不建得上都不影响窗口和服务，WatchAdbAsync 每 3 秒还会巡检。
+        var host = _host;
+        if (host is null) return;
+
+        _ = Task.Run(() =>
+        {
+            var (ok, message) = host.TryEstablishAdbTunnel();
+            Console.WriteLine(ok ? $"ADB 隧道已建立：{message}" : $"ADB 隧道未建立：{message}");
+        });
     }
 
     internal void StopServer()
@@ -395,11 +426,15 @@ public sealed class MainForm : Form
     }
 
     /// <summary>建 adb reverse 隧道：手机插着线并授权后，连自己的 127.0.0.1 就能打到这台机器。</summary>
-    internal void EstablishAdbTunnel()
+    internal async void EstablishAdbTunnel()
     {
-        if (_host is null) return;
+        var host = _host;
+        if (host is null) return;
 
-        var (ok, message) = _host.TryEstablishAdbTunnel();
+        // 这是设置弹窗里的按钮，不能同步跑 adb —— 否则整个窗口跟着一起卡。
+        var (ok, message) = await Task.Run(() => host.TryEstablishAdbTunnel());
+        if (_host != host) return;      // 期间被停掉/重建了，别再往旧状态上写
+
         Console.WriteLine(ok ? $"ADB 隧道：{message}" : $"ADB 隧道失败：{message}");
         _statusLabel.ForeColor = ok ? PadTheme.Ok : PadTheme.Error;
         _statusLabel.Text = ok ? "ADB 隧道已建立" : $"ADB 隧道失败：{message}";

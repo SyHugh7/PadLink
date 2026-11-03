@@ -25,41 +25,61 @@ public sealed class SessionRegistry(
     /// </summary>
     private readonly Dictionary<byte, PadSession> _sessions = [];
 
-    public IReadOnlyCollection<PadSession> Sessions => _sessions.Values;
+    /// <summary>
+    /// 网络线程会加会话，UI 线程每 500ms 枚举一次。直接暴露 Dictionary.Values 的话，
+    /// 枚举过程中另一个线程增删就会抛 "Collection was modified"。
+    /// 所有访问都过这把锁，读出去的是快照。
+    /// </summary>
+    private readonly object _gate = new();
+
+    public IReadOnlyCollection<PadSession> Sessions
+    {
+        get
+        {
+            lock (_gate) return _sessions.Values.ToArray();
+        }
+    }
 
     /// <summary>查找会话；不存在则按帧里声明的 player / controller 创建一台虚拟手柄。</summary>
     public PadSession GetOrCreate(IPEndPoint remote, in InputFrame frame)
     {
-        if (_sessions.TryGetValue(frame.Player, out var existing))
+        lock (_gate)
         {
-            if (!existing.Remote.Equals(remote))
+            if (_sessions.TryGetValue(frame.Player, out var existing))
             {
-                Console.WriteLine($"  P{frame.Player} 来源变更 {existing.Remote} → {remote}，沿用已有虚拟手柄");
-                existing.Rebind(remote);
+                if (!existing.Remote.Equals(remote))
+                {
+                    Console.WriteLine($"  P{frame.Player} 来源变更 {existing.Remote} → {remote}，沿用已有虚拟手柄");
+                    existing.Rebind(remote);
+                }
+
+                return existing;
             }
 
-            return existing;
+            // PC 端指定了类型就用它；后端做不出来再退回手机声明的。
+            var requested = preferred is { } forced && backend.Supports(forced) ? forced : frame.Controller;
+
+            if (!backend.Supports(requested))
+                throw new VirtualControllerException($"后端 {backend.Name} 不支持 {requested.ToWireName()}");
+
+            var controller = backend.Connect(frame.Player, requested);
+            var session = new PadSession(remote, controller);
+            _sessions[frame.Player] = session;
+
+            var source = preferred is { } p && requested == p ? "PC 指定" : "手机声明";
+            Console.WriteLine(
+                $"  新建会话 P{frame.Player} {requested.ToWireName()}（{source}）← {remote}（后端 {backend.Name}）");
+            return session;
         }
-
-        // PC 端指定了类型就用它；后端做不出来再退回手机声明的。
-        var requested = preferred is { } forced && backend.Supports(forced) ? forced : frame.Controller;
-
-        if (!backend.Supports(requested))
-            throw new VirtualControllerException($"后端 {backend.Name} 不支持 {requested.ToWireName()}");
-
-        var controller = backend.Connect(frame.Player, requested);
-        var session = new PadSession(remote, controller);
-        _sessions[frame.Player] = session;
-
-        var source = preferred is { } p && requested == p ? "PC 指定" : "手机声明";
-        Console.WriteLine(
-            $"  新建会话 P{frame.Player} {requested.ToWireName()}（{source}）← {remote}（后端 {backend.Name}）");
-        return session;
     }
 
     public void PollFailSafe()
     {
-        foreach (var session in _sessions.Values) session.PollFailSafe();
+        // 快照之后再提交，别让驱动回调/UI 的耗时占着锁。
+        PadSession[] snapshot;
+        lock (_gate) snapshot = _sessions.Values.ToArray();
+
+        foreach (var session in snapshot) session.PollFailSafe();
     }
 
     /// <summary>
@@ -72,16 +92,20 @@ public sealed class SessionRegistry(
     /// <returns>回收掉的会话数。</returns>
     public int ReapIdleSessions(TimeSpan idle)
     {
-        var victims = _sessions
-            .Where(pair => pair.Value.IdleFor > idle)
-            .Select(pair => pair.Key)
-            .ToList();
+        var victims = new List<(byte Player, PadSession Session)>();
 
-        foreach (var player in victims)
+        lock (_gate)
         {
-            var session = _sessions[player];
-            _sessions.Remove(player);
+            foreach (var pair in _sessions)
+            {
+                if (pair.Value.IdleFor > idle) victims.Add((pair.Key, pair.Value));
+            }
 
+            foreach (var (player, _) in victims) _sessions.Remove(player);
+        }
+
+        foreach (var (player, session) in victims)
+        {
             Console.WriteLine(
                 $"  回收空闲会话 P{player}（{session.IdleFor.TotalSeconds:F0}s 无数据），销毁虚拟手柄");
             session.Dispose();
@@ -92,7 +116,14 @@ public sealed class SessionRegistry(
 
     public void Dispose()
     {
-        foreach (var session in _sessions.Values) session.Dispose();
-        _sessions.Clear();
+        PadSession[] snapshot;
+
+        lock (_gate)
+        {
+            snapshot = _sessions.Values.ToArray();
+            _sessions.Clear();
+        }
+
+        foreach (var session in snapshot) session.Dispose();
     }
 }
