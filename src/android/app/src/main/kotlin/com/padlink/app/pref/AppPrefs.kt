@@ -57,6 +57,8 @@ class AppPrefs(context: Context) {
     private var accentColorState by mutableStateOf(loadAccentColor())
     private var hapticState by mutableStateOf(prefs.getBoolean(KEY_HAPTIC, true))
     private var freezeState by mutableStateOf(prefs.getBoolean(KEY_FREEZE, false))
+    private var statusBarState by mutableStateOf(prefs.getBoolean(KEY_STATUS_BAR, false))
+    private var statusBarAppliedState by mutableStateOf(prefs.getBoolean(KEY_STATUS_BAR_APPLIED, false))
 
     var themeMode: ThemeMode
         get() = themeModeState
@@ -88,6 +90,27 @@ class AppPrefs(context: Context) {
             prefs.edit().putBoolean(KEY_FREEZE, value).apply()
         }
 
+    /** 应用在前台时禁用状态栏。需要 Dhizuku 授权，真正的调用在 `DhizukuStatusBar`。 */
+    var disableStatusBar: Boolean
+        get() = statusBarState
+        set(value) {
+            statusBarState = value
+            prefs.edit().putBoolean(KEY_STATUS_BAR, value).apply()
+        }
+
+    /**
+     * 状态栏此刻是不是真的被禁用着。
+     *
+     * 不是用户设置，是给下次启动补恢复用的保险丝：进程被强杀时 onStop 不会跑，
+     * 这个标记还会是 true，下次启动看到它就知道要先恢复。
+     */
+    var statusBarApplied: Boolean
+        get() = statusBarAppliedState
+        set(value) {
+            statusBarAppliedState = value
+            prefs.edit().putBoolean(KEY_STATUS_BAR_APPLIED, value).apply()
+        }
+
     private fun loadThemeMode(): ThemeMode =
         prefs.getString(KEY_THEME_MODE, null)
             ?.let { name -> ThemeMode.entries.firstOrNull { it.name == name } }
@@ -104,5 +127,7 @@ class AppPrefs(context: Context) {
         const val KEY_ACCENT = "accentColor"
         const val KEY_HAPTIC = "hapticFeedback"
         const val KEY_FREEZE = "freezeOnBackground"
+        const val KEY_STATUS_BAR = "disableStatusBar"
+        const val KEY_STATUS_BAR_APPLIED = "statusBarApplied"
     }
 }

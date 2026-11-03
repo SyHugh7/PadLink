@@ -5,6 +5,20 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
+    <!-- Dhizuku：API 权限，以及 Android 11+ 能发现 Dhizuku 服务器的 queries。 -->
+    <uses-permission android:name="com.rosan.dhizuku.permission.API" />
+
+    <queries>
+        <package android:name="com.rosan.dhizuku" />
+        <provider android:authorities="com.rosan.dhizuku.server.provider" />
+        <intent>
+            <action android:name="com.rosan.dhizuku.server.provider" />
+        </intent>
+        <intent>
+            <action android:name="com.rosan.dhizuku.action.request.permission" />
+        </intent>
+    </queries>
+
     <application
         android:name=".PadLinkApplication"
         android:label="@string/app_name"

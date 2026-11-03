@@ -29,6 +29,16 @@ import com.padlink.app.ui.theme.PadLinkTheme
 
 /** 设置页。跟主界面分属两个 Activity，状态都在 [PadLinkApplication] 里共享。 */
 class SettingsActivity : ComponentActivity() {
+    override fun onStart() {
+        super.onStart()
+        (application as PadLinkApplication).statusBar.onForeground()
+    }
+
+    override fun onStop() {
+        (application as PadLinkApplication).statusBar.onBackground()
+        super.onStop()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -258,10 +268,14 @@ private fun SettingsPage(app: PadLinkApplication, onBack: () -> Unit) {
 
                 SwitchRow(
                     label = "前台时禁用状态栏",
-                    checked = false,
-                    onChange = {},
-                    enabled = false,
-                    hint = "需要 Dhizuku",
+                    checked = prefs.disableStatusBar,
+                    onChange = { app.statusBar.setEnabled(it) },
+                    enabled = app.statusBar.available,
+                    hint = when {
+                        !app.statusBar.available -> "需要 Dhizuku"
+                        !app.statusBar.granted -> "需要 Dhizuku 授权"
+                        else -> null
+                    },
                 )
             }
 

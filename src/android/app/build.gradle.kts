@@ -23,8 +23,8 @@ android {
         applicationId = "com.padlink.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 14
-        versionName = "0.7.0"
+        versionCode = 15
+        versionName = "0.8.0"
     }
 
     signingConfigs {
@@ -54,6 +54,7 @@ android {
 
     buildFeatures {
         compose = true
+        aidl = true
     }
 }
 
@@ -63,6 +64,9 @@ kotlin {
 
 dependencies {
     implementation(project(":core"))
+
+    // Dhizuku API：用 aar 里的 classes.jar，避免它的 aar metadata 把 compileSdk 拉到 36。
+    implementation(files("libs/Dhizuku-API-2.7.0.jar"))
 
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-compose:1.9.3")

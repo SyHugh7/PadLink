@@ -55,10 +55,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        (application as PadLinkApplication).statusBar.onForeground()
+    }
+
     override fun onStop() {
+        val app = application as PadLinkApplication
+        app.statusBar.onBackground()
         super.onStop()
         // 切走时主动归零，别让 PC 端还顶着油门。
-        val app = application as PadLinkApplication
         if (app.prefs.freezeOnBackground) app.controller.freezeInput()
     }
 

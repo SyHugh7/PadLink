@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.padlink.app.input.TiltSource
 import com.padlink.app.input.TiltStore
+import com.padlink.app.dhizuku.DhizukuStatusBar
 import com.padlink.app.layout.LayoutStore
 import com.padlink.app.layout.PadLayout
 import com.padlink.app.pref.AppPrefs
@@ -29,6 +30,10 @@ class PadLinkApplication : Application() {
     lateinit var prefs: AppPrefs
         private set
 
+    /** Dhizuku 状态栏策略：请求权限、在前台禁用、离开后恢复。 */
+    lateinit var statusBar: DhizukuStatusBar
+        private set
+
     private lateinit var layoutStore: LayoutStore
 
     /** 当前布局。两个 Activity 共用这一份，改了就存盘。 */
@@ -44,6 +49,8 @@ class PadLinkApplication : Application() {
         layoutStore = LayoutStore(this)
         layout = layoutStore.load()
         controller = PadLinkController(scope, TiltSource(this), TiltStore(this))
+        statusBar = DhizukuStatusBar(this, prefs)
+        statusBar.prepare()
     }
 
     fun updateLayout(next: PadLayout) {
