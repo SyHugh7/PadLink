@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import com.padlink.app.ui.theme.LocalPadPalette
 import kotlin.math.min
 
 /**
@@ -28,6 +29,7 @@ fun StickPad(
 ) {
     var knob by remember { mutableStateOf(Offset.Zero) }
     var pressed by remember { mutableStateOf(false) }
+    val colors = LocalPadPalette.current
 
     Canvas(
         modifier = modifier
@@ -76,16 +78,16 @@ fun StickPad(
         val knobRadius = radius * 0.40f
 
         // 底盘 → 内凹 → 摇杆头，三层就够，不加十字线（容易显得乱）。
-        drawCircle(color = PadColors.StickBase, radius = radius, center = center)
-        drawCircle(color = PadColors.StickWell, radius = radius * 0.88f, center = center)
+        drawCircle(color = colors.stickBase, radius = radius, center = center)
+        drawCircle(color = colors.stickWell, radius = radius * 0.88f, center = center)
         drawCircle(
-            color = PadColors.Hairline,
+            color = colors.hairline,
             radius = radius,
             center = center,
             style = Stroke(radius * 0.045f),
         )
         drawCircle(
-            color = if (pressed) PadColors.ButtonPressed else PadColors.StickKnob,
+            color = if (pressed) colors.stickKnobPressed else colors.stickKnob,
             radius = knobRadius,
             center = center + knob * maxTravel,
         )

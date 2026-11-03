@@ -20,7 +20,6 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
@@ -29,8 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.padlink.app.layout.PadLayout
-
-private const val Accent = 0xFF4C8DFF.toInt()
+import com.padlink.app.ui.theme.LocalPadPalette
 
 /**
  * 扳机·滑动条样式。
@@ -38,7 +36,7 @@ private const val Accent = 0xFF4C8DFF.toInt()
  * 就是一根圆角长条，分两段：
  *
  * - **顶端那一段是弱加载区**（暗色）：按上去算抓住了扳机，但输出恒为 0
- * - **下面那段是行程**（蓝色，跟着手指走）
+ * - **下面那段是行程**（主题色，跟着手指走）
  *
  * 为什么要顶端那一段：手指有宽度，想从 0 开始往下滑，按下去的位置往往已经在 10% 以上了，
  * 一按上就有值，从头走满 0→100 根本做不到。留一段不响应的，按在哪儿都还是 0。
@@ -54,15 +52,16 @@ fun TriggerSlider(
 ) {
     var value by remember { mutableFloatStateOf(0f) }
     var pressed by remember { mutableStateOf(false) }
+    val colors = LocalPadPalette.current
 
     // 按下去必须看得见：弱加载区里值恒为 0，光盯填充根本判断不出到底抓住没有。
     val gateFill by animateColorAsState(
-        targetValue = if (pressed) Color(0xFF3A4761) else Color(0xFF232323),
+        targetValue = if (pressed) colors.triggerGatePressed else colors.triggerGate,
         animationSpec = tween(120),
         label = "gateFill",
     )
     val barStroke by animateColorAsState(
-        targetValue = if (pressed) Color(0xFF707070) else Color(0xFF4A4A4A),
+        targetValue = if (pressed) colors.triggerOutlinePressed else colors.triggerOutline,
         animationSpec = tween(120),
         label = "barStroke",
     )
@@ -114,7 +113,7 @@ fun TriggerSlider(
             val outline = size.width * 0.09f
 
             // 整条底色
-            drawRoundRect(color = Color(0xFF2C2C2C), cornerRadius = corner)
+            drawRoundRect(color = colors.triggerTrack, cornerRadius = corner)
 
             // 内容都裁到圆角里，免得顶端那段画出方角
             val shape = Path().apply {
@@ -128,7 +127,7 @@ fun TriggerSlider(
 
                 if (value > 0f) {
                     drawRect(
-                        color = Color(Accent),
+                        color = colors.triggerFill,
                         topLeft = Offset(0f, gateHeight),
                         size = Size(size.width, travel * value),
                     )
@@ -138,7 +137,7 @@ fun TriggerSlider(
             // 两段的分界
             if (gateHeight > 0f) {
                 drawLine(
-                    color = Color(0xFF4A4A4A),
+                    color = colors.triggerOutline,
                     start = Offset(0f, gateHeight),
                     end = Offset(size.width, gateHeight),
                     strokeWidth = outline * 0.6f,
@@ -155,7 +154,7 @@ fun TriggerSlider(
         if (label.isNotEmpty()) {
             Text(
                 text = label,
-                color = Color(0xFFEDEDED),
+                color = colors.triggerLabel,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(top = 3.dp),

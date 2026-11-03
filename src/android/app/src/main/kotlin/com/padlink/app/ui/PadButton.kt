@@ -13,38 +13,28 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
-
-/** 手柄控件的统一配色。集中放一处，改风格不用满项目找颜色。 */
-object PadColors {
-    val Button = Color(0xFF4A4A4A)
-    val ButtonPressed = Color(0xFF4C8DFF)
-    val ButtonLabel = Color(0xFFEDEDED)
-    val ButtonLabelPressed = Color(0xFF10192B)
-    val Hairline = Color(0x1AFFFFFF)
-    val StickBase = Color(0xFF3A3A3A)
-    val StickWell = Color(0xFF2A2A2A)
-    val StickKnob = Color(0xFFC8C8C8)
-}
+import com.padlink.app.ui.theme.LocalPadPalette
 
 /**
  * 圆形按键。按住期间保持按下，即使手指滑出按钮范围——跟真实手柄手感一致。
+ *
+ * 配色来自 [LocalPadPalette]：未按下是中性面，按下是主题色。
  */
 @Composable
 fun PadButton(
     label: String,
     modifier: Modifier = Modifier,
-    tint: Color = PadColors.Button,
     labelSize: TextUnit = 16.sp,
     onPressChange: (Boolean) -> Unit = {},
 ) {
     var pressed by remember { mutableStateOf(false) }
+    val colors = LocalPadPalette.current
 
     Box(
         modifier = modifier
@@ -69,14 +59,14 @@ fun PadButton(
             }
             .drawBehind {
                 val radius = size.minDimension / 2f
-                drawCircle(color = if (pressed) PadColors.ButtonPressed else tint, radius = radius)
-                drawCircle(color = PadColors.Hairline, radius = radius, style = Stroke(radius * 0.06f))
+                drawCircle(color = if (pressed) colors.facePressed else colors.face, radius = radius)
+                drawCircle(color = colors.hairline, radius = radius, style = Stroke(radius * 0.06f))
             },
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
-            color = if (pressed) PadColors.ButtonLabelPressed else PadColors.ButtonLabel,
+            color = if (pressed) colors.labelPressed else colors.label,
             fontSize = labelSize,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,

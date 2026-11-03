@@ -12,9 +12,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import com.padlink.app.ui.theme.LocalPadPalette
 import com.padlink.core.DPad
 import kotlin.math.atan2
 import kotlin.math.hypot
@@ -32,6 +32,7 @@ fun DPadPad(
     onDirection: (DPad) -> Unit = {},
 ) {
     var active by remember { mutableStateOf(DPad.NEUTRAL) }
+    val colors = LocalPadPalette.current
 
     Canvas(
         modifier = modifier
@@ -74,12 +75,12 @@ fun DPadPad(
         val center = Offset(size.width / 2f, size.height / 2f)
         val radius = min(size.width, size.height) / 2f
 
-        drawCircle(color = PadColors.StickBase, radius = radius, center = center)
+        drawCircle(color = colors.stickBase, radius = radius, center = center)
 
         // 按下方向的扇形，垫在内圈下面，看起来像外环亮了一格。
         if (active != DPad.NEUTRAL) {
             drawArc(
-                color = Color(0xFF3D7BFF),
+                color = colors.dpadArc,
                 startAngle = degreesToStartAngle(active) - 22.5f,
                 sweepAngle = 45f,
                 useCenter = true,
@@ -88,23 +89,23 @@ fun DPadPad(
             )
         }
 
-        drawCircle(color = Color(0xFF262626), radius = radius * 0.62f, center = center)
+        drawCircle(color = colors.dpadWell, radius = radius * 0.62f, center = center)
 
         // 四个方向的臂，提示这是个十字键。
         val arm = radius * 0.5f
         val thickness = radius * 0.16f
-        val armColor = Color(0xFF3A3A3A)
+        val armColor = colors.dpadArm
         drawRect(armColor, Offset(center.x - thickness / 2f, center.y - arm), Size(thickness, arm - thickness))
         drawRect(armColor, Offset(center.x - thickness / 2f, center.y + thickness / 2f), Size(thickness, arm - thickness))
         drawRect(armColor, Offset(center.x - arm, center.y - thickness / 2f), Size(arm - thickness, thickness))
         drawRect(armColor, Offset(center.x + thickness / 2f, center.y - thickness / 2f), Size(arm - thickness, thickness))
 
         drawCircle(
-            color = if (active != DPad.NEUTRAL) Color(0xFF8FC0FF) else Color(0xFF3F3F3F),
+            color = if (active != DPad.NEUTRAL) colors.dpadCenterPressed else colors.dpadCenter,
             radius = radius * 0.15f,
             center = center,
         )
-        drawCircle(color = PadColors.Hairline, radius = radius, center = center, style = Stroke(radius * 0.05f))
+        drawCircle(color = colors.hairline, radius = radius, center = center, style = Stroke(radius * 0.05f))
     }
 }
 

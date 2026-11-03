@@ -42,6 +42,7 @@ import com.padlink.app.layout.PadElementKind
 import com.padlink.app.layout.PadLayout
 import com.padlink.app.layout.SubKey
 import com.padlink.app.layout.TriggerStyle
+import com.padlink.app.ui.theme.LocalPadPalette
 import com.padlink.core.DPad
 import com.padlink.core.GamepadButtons
 
@@ -50,10 +51,6 @@ sealed interface Selection {
     data class Element(val kind: PadElementKind) : Selection
     data class Sub(val kind: PadElementKind, val index: Int) : Selection
 }
-
-private val SelectedBorder = Color(0xFF3D7BFF)
-private val SelectedFill = Color(0x443D7BFF)
-private val DisabledBorder = Color(0x99787878)
 
 /**
  * 拖动判定阈值。
@@ -232,10 +229,14 @@ private fun SubKeyEditor(
 
 // ------------------------------------------------------------------ 正常模式的渲染
 
-private fun Modifier.selectionPaint(): Modifier = drawBehind {
-    val corner = CornerRadius(14f, 14f)
-    drawRoundRect(color = SelectedFill, cornerRadius = corner)
-    drawRoundRect(color = SelectedBorder, cornerRadius = corner, style = Stroke(width = 4f))
+@Composable
+private fun Modifier.selectionPaint(): Modifier {
+    val colors = LocalPadPalette.current
+    return drawBehind {
+        val corner = CornerRadius(14f, 14f)
+        drawRoundRect(color = colors.selectionFill, cornerRadius = corner)
+        drawRoundRect(color = colors.selectionBorder, cornerRadius = corner, style = Stroke(width = 4f))
+    }
 }
 
 /** 每个控件的宽高比见 [PadLayout.aspectOf]——放在数据模型上，测试也要用。 */
@@ -300,7 +301,7 @@ private fun ElementContent(element: PadElement, layout: PadLayout, controller: P
             controller.setButton(GamepadButtons.START, down)
         }
 
-        PadElementKind.GUIDE -> PadButton("Guide", Modifier.fillMaxSize(), labelSize = 12.sp) { down ->
+        PadElementKind.GUIDE -> PadGuideButton(Modifier.fillMaxSize()) { down ->
             controller.setButton(GamepadButtons.GUIDE, down)
         }
 
@@ -386,6 +387,7 @@ private fun TriangleKey(
     onPressChange: (Boolean) -> Unit,
 ) {
     var down by remember { mutableStateOf(false) }
+    val colors = LocalPadPalette.current
 
     Box(
         modifier = modifier
@@ -411,10 +413,10 @@ private fun TriangleKey(
                 val radius = size.minDimension / 2f
                 val center = Offset(size.width / 2f, size.height / 2f)
 
-                drawCircle(color = if (down) PadColors.ButtonPressed else PadColors.Button, radius = radius, center = center)
+                drawCircle(color = if (down) colors.facePressed else colors.face, radius = radius, center = center)
                 drawTriangle(
                     direction = direction,
-                    color = if (down) PadColors.ButtonLabelPressed else PadColors.ButtonLabel,
+                    color = if (down) colors.labelPressed else colors.label,
                     center = center,
                     radius = radius * 0.46f,
                 )
@@ -481,18 +483,22 @@ private fun DrawScope.drawTriangle(direction: DPad, color: Color, center: Offset
 @Composable
 private fun ElementOutline(element: PadElement, selected: Boolean) {
     val shape = RoundedCornerShape(10.dp)
-    val accent = if (element.enabled) Color(0x663D7BFF) else Color(0x66787878)
+    val colors = LocalPadPalette.current
+    val accent = if (element.enabled) colors.selectionBorder.copy(alpha = 0.40f) else colors.disabledBorder
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(if (element.enabled) Color(0x1A3D7BFF) else Color(0x1A787878), shape)
+            .background(
+                if (element.enabled) colors.selectionFill.copy(alpha = 0.10f) else colors.disabledFill,
+                shape,
+            )
             .border(if (selected) 1.5.dp else 1.dp, accent, shape),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = element.kind.label,
-            color = if (element.enabled) Color(0xFFB8D4FF) else Color(0xFFAAAAAA),
+            color = if (element.enabled) colors.selectionText else colors.disabledText,
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
@@ -503,18 +509,22 @@ private fun ElementOutline(element: PadElement, selected: Boolean) {
 @Composable
 private fun SubKeyOutline(key: SubKey, selected: Boolean) {
     val shape = RoundedCornerShape(8.dp)
-    val accent = if (key.enabled) Color(0x663D7BFF) else DisabledBorder
+    val colors = LocalPadPalette.current
+    val accent = if (key.enabled) colors.selectionBorder.copy(alpha = 0.40f) else colors.disabledBorder
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(if (key.enabled) Color(0x1F3D7BFF) else Color(0x1F787878), shape)
+            .background(
+                if (key.enabled) colors.selectionFill.copy(alpha = 0.14f) else colors.disabledFill,
+                shape,
+            )
             .border(if (selected) 1.5.dp else 1.dp, accent, shape),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = key.label,
-            color = if (key.enabled) Color(0xFFE0E8FF) else Color(0xFFAAAAAA),
+            color = if (key.enabled) colors.selectionText else colors.disabledText,
             fontSize = 11.sp,
             maxLines = 1,
         )

@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
+import com.padlink.app.ui.theme.LocalPadPalette
 
 /**
  * 圆角矩形按钮。肩键（LB/RB）和按钮式扳机（LT/RT）都用它——
@@ -32,6 +33,7 @@ fun PadRectButton(
     onPressChange: (Boolean) -> Unit = {},
 ) {
     var pressed by remember { mutableStateOf(false) }
+    val colors = LocalPadPalette.current
 
     Box(
         modifier = modifier
@@ -56,11 +58,11 @@ fun PadRectButton(
             .drawBehind {
                 val corner = CornerRadius(size.height * 0.26f)
                 drawRoundRect(
-                    color = if (pressed) PadColors.ButtonPressed else PadColors.Button,
+                    color = if (pressed) colors.facePressed else colors.face,
                     cornerRadius = corner,
                 )
                 drawRoundRect(
-                    color = PadColors.Hairline,
+                    color = colors.hairline,
                     cornerRadius = corner,
                     style = Stroke(width = size.height * 0.05f),
                 )
@@ -69,7 +71,7 @@ fun PadRectButton(
     ) {
         Text(
             text = label,
-            color = if (pressed) PadColors.ButtonLabelPressed else PadColors.ButtonLabel,
+            color = if (pressed) colors.labelPressed else colors.label,
             fontSize = labelSize,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,

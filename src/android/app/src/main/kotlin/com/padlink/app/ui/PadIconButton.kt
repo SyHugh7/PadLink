@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import com.padlink.app.ui.theme.LocalPadPalette
 
 /** Xbox 手柄上那两颗小键的标准图标。 */
 enum class PadIcon {
@@ -38,6 +39,7 @@ fun PadIconButton(
     onPressChange: (Boolean) -> Unit = {},
 ) {
     var pressed by remember { mutableStateOf(false) }
+    val colors = LocalPadPalette.current
 
     Box(
         modifier = modifier
@@ -62,13 +64,13 @@ fun PadIconButton(
             }
             .drawBehind {
                 val radius = size.minDimension / 2f
-                val face = if (pressed) PadColors.ButtonPressed else PadColors.Button
+                val face = if (pressed) colors.facePressed else colors.face
 
                 drawCircle(color = face, radius = radius)
-                drawCircle(color = PadColors.Hairline, radius = radius, style = Stroke(radius * 0.06f))
+                drawCircle(color = colors.hairline, radius = radius, style = Stroke(radius * 0.06f))
                 drawXboxIcon(
                     icon = icon,
-                    color = if (pressed) PadColors.ButtonLabelPressed else PadColors.ButtonLabel,
+                    color = if (pressed) colors.labelPressed else colors.label,
                     background = face,
                 )
             },

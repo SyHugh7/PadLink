@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -91,7 +92,7 @@ private fun RowScope.EditTools(
                 is Selection.Element -> selection.kind.label
                 is Selection.Sub -> "${selection.kind.label} · ${selection.index + 1}"
             },
-            color = Color(0xFFB8D4FF),
+            color = MaterialTheme.colorScheme.primary,
             fontSize = 13.sp,
             maxLines = 1,
         )

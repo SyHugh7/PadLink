@@ -49,7 +49,11 @@ fun QuickPanel(
             shadowElevation = 8.dp,
         ) {
             Column(Modifier.width(260.dp).padding(vertical = 6.dp)) {
-                SwitchRow("连接状态", controller.isConnected) { on ->
+                SwitchRow(
+                    label = "连接状态",
+                    checked = controller.isConnected,
+                    status = if (controller.isConnected) "已连接" else "未连接",
+                ) { on ->
                     if (on) controller.connect() else controller.disconnect()
                 }
 
@@ -90,14 +94,27 @@ private fun SwitchRow(
     label: String,
     checked: Boolean,
     enabled: Boolean = true,
+    status: String? = null,
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, fontSize = 14.sp)
+        if (status != null) {
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = status,
+                color = if (checked) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                fontSize = 12.sp,
+            )
+        }
+        Spacer(Modifier.weight(1f))
         Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
     }
 }
