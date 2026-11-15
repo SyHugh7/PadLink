@@ -1,9 +1,9 @@
-namespace PadLink.Core.Protocol;
+﻿namespace PadLink.Core.Protocol;
 
 /// <summary>端口、节拍、超时等协议常量。见 protocol.md §1 / §7。</summary>
 public static class ProtocolConstants
 {
-    /// <summary>控制通道（TCP）。</summary>
+    /// <summary>控制通道（TCP）。主机监听这个端口；ADB 模式下设备端监听端口从这里挑。</summary>
     public const int ControlPort = 42312;
 
     /// <summary>发现 + 数据通道（UDP，PC 端单 socket 复用）。</summary>

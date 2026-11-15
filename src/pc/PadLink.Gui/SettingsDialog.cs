@@ -13,6 +13,7 @@ internal sealed class SettingsDialog : Form
     private Button _adbButton = null!;
     private Button _xboxChip = null!;
     private Button _psChip = null!;
+    private NumericUpDown _portInput = null!;
 
     public SettingsDialog(MainForm owner)
     {
@@ -26,7 +27,7 @@ internal sealed class SettingsDialog : Form
         ShowInTaskbar = false;
         BackColor = PadTheme.Background;
         ForeColor = PadTheme.Text;
-        ClientSize = new Size(460, 330);
+        ClientSize = new Size(460, 400);
         Font = PadTheme.Body;
 
         Build();
@@ -93,14 +94,50 @@ internal sealed class SettingsDialog : Form
 
         AddSection("端口", ref y);
 
-        var ports = new Label
+        var portLabel = new Label
         {
-            Text = $"UDP {ProtocolConstants.UdpPort}（WiFi）     TCP {ProtocolConstants.ControlPort}（ADB）",
+            Text = "控制端口（ADB，两端填同一个）",
             ForeColor = PadTheme.Text,
             Location = new Point(20, y),
             Size = new Size(420, 20),
         };
-        Controls.Add(ports);
+        Controls.Add(portLabel);
+
+        _portInput = new NumericUpDown
+        {
+            Minimum = 1024,
+            Maximum = 65535,
+            Value = Math.Clamp(_owner.ControlPort, 1024, 65535),
+            Location = new Point(20, y + 26),
+            Size = new Size(110, 26),
+            BackColor = PadTheme.Surface,
+            ForeColor = PadTheme.Text,
+            BorderStyle = BorderStyle.FixedSingle,
+            Font = PadTheme.Body,
+            TextAlign = HorizontalAlignment.Right,
+            DecimalPlaces = 0,
+        };
+        Controls.Add(_portInput);
+
+        var applyPort = PadTheme.MakeButton("应用", 72);
+        applyPort.Location = new Point(140, y + 26);
+        applyPort.Click += (_, _) =>
+        {
+            _owner.SetControlPort((int)_portInput.Value);
+            SyncServiceButtons();
+        };
+        Controls.Add(applyPort);
+
+        var portHint = new Label
+        {
+            Text = $"UDP {ProtocolConstants.UdpPort}（WiFi，固定） · 改端口会重建服务",
+            ForeColor = PadTheme.TextMuted,
+            Font = PadTheme.BodySmall,
+            Location = new Point(20, y + 58),
+            Size = new Size(420, 30),
+        };
+        Controls.Add(portHint);
+        y += 96;
 
         var close = PadTheme.MakeButton("关闭", 92);
         close.Location = new Point(ClientSize.Width - 112, ClientSize.Height - 48);

@@ -27,15 +27,22 @@ public sealed class MainForm : Form
 
     private PadLinkHost? _host;
     private readonly string _localAddress;
+    private readonly GuiSettings _settings;
     private bool _exiting;
 
     /// <summary>PC 端要模拟成什么手柄。切换会让服务重建一次。</summary>
     internal ControllerType PreferredController { get; private set; } = ControllerType.Xbox360;
 
+    /// <summary>ADB 控制端口。手机端设置里要填同一个数字。</summary>
+    internal int ControlPort { get; private set; } = ProtocolConstants.ControlPort;
+
     internal bool IsRunning => _host is not null;
 
     public MainForm()
     {
+        _settings = GuiSettings.Load();
+        ControlPort = _settings.ControlPort;
+
         // 不要用 Dns.GetHostAddresses(本机名)：DNS 一慢，构造函数就卡在窗口出现之前。
         _localAddress = ResolveLocalAddress();
 
@@ -391,7 +398,7 @@ public sealed class MainForm : Form
                 backend,
                 ProtocolConstants.UdpPort,
                 ProtocolConstants.IdleSessionTimeout,
-                ProtocolConstants.ControlPort,
+                ControlPort,
                 PreferredController);
             _host.Start();
         }
@@ -460,6 +467,32 @@ public sealed class MainForm : Form
     /// 换了手柄类型。类型是建服务时定下来的（驱动层面创建设备），所以要重建一次；
     /// 正在跑就自动重启，免得用户还要手动点两下。
     /// </summary>
+    /// <summary>
+    /// 改 ADB 控制端口。端口是建服务时定下来的，正在跑就重建一次；
+    /// 手机会在另一端按同一个端口重连。
+    /// </summary>
+    internal void SetControlPort(int port)
+    {
+        if (port is < 1024 or > 65535)
+        {
+            Console.WriteLine($"控制端口 {port} 超出范围，忽略");
+            return;
+        }
+
+        if (port == ControlPort) return;
+
+        ControlPort = port;
+        _settings.ControlPort = port;
+        _settings.Save();
+        Console.WriteLine($"控制端口 → {port}");
+
+        if (_host is null) return;
+
+        Console.WriteLine("正在按新端口重建服务…");
+        StopServer();
+        StartServer();
+    }
+
     internal void SetControllerType(ControllerType type)
     {
         if (type == PreferredController) return;

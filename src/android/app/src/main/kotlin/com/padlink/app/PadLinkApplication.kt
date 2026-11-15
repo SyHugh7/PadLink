@@ -51,7 +51,7 @@ class PadLinkApplication : Application() {
         prefs = AppPrefs(this)
         layoutStore = LayoutStore(this)
         layout = layoutStore.load()
-        controller = PadLinkController(scope, TiltSource(this), TiltStore(this))
+        controller = PadLinkController(scope, TiltSource(this), TiltStore(this), prefs)
         statusBar = DhizukuStatusBar(this, prefs)
         statusBar.prepare()
     }

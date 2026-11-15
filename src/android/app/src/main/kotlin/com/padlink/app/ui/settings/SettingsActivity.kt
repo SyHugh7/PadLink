@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.automirrored.filled.List
@@ -36,9 +37,11 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -52,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -62,6 +66,7 @@ import com.padlink.app.layout.PadElementKind
 import com.padlink.app.layout.PadLayout
 import com.padlink.app.layout.TriggerStyle
 import com.padlink.app.pref.AccentColor
+import com.padlink.core.ProtocolConstants
 import com.padlink.app.pref.ThemeMode
 import com.padlink.app.ui.theme.PadLinkTheme
 import com.padlink.app.ui.theme.previewPrimary
@@ -75,6 +80,7 @@ import com.padlink.app.ui.theme.previewPrimary
 private enum class SettingsRoute(val title: String) {
     HOME("设置"),
     THEME("主题设置"),
+    CONNECTION("连接设置"),
     TRIGGER("扳机设置"),
     DPAD("十字键设置"),
     TILT("重力转向"),
@@ -169,6 +175,11 @@ private fun SettingsHost(app: PadLinkApplication, onFinish: () -> Unit) {
                 onBack = { routeName = SettingsRoute.HOME.name },
             )
 
+            SettingsRoute.CONNECTION -> ConnectionPage(
+                app = app,
+                onBack = { routeName = SettingsRoute.HOME.name },
+            )
+
             SettingsRoute.TILT -> TiltPage(
                 app = app,
                 onBack = { routeName = SettingsRoute.HOME.name },
@@ -219,6 +230,16 @@ private fun HomePage(
                 subtitle = "深浅模式与主题色",
                 icon = PaletteIcon,
                 onClick = { onOpen(SettingsRoute.THEME) },
+            )
+        }
+
+        SettingsSection("连接")
+        CardStack {
+            NavCard(
+                title = "连接设置",
+                subtitle = "ADB 控制端口 ${prefs.controlPort}",
+                icon = Icons.Filled.Settings,
+                onClick = { onOpen(SettingsRoute.CONNECTION) },
             )
         }
 
@@ -418,6 +439,66 @@ private fun DPadPage(app: PadLinkApplication, onBack: () -> Unit) {
                 onSelect = { app.updateLayout(layout.copy(dpadStyle = it)) },
             )
         }
+
+        SettingsPageBottomSpacer()
+    }
+}
+
+@Composable
+private fun ConnectionPage(app: PadLinkApplication, onBack: () -> Unit) {
+    val prefs = app.prefs
+    val context = LocalContext.current
+    var portText by rememberSaveable { mutableStateOf(prefs.controlPort.toString()) }
+
+    SettingsScaffold(title = SettingsRoute.CONNECTION.title, onBack = onBack) {
+        Spacer(Modifier.height(8.dp))
+
+        SettingsCard(
+            title = "ADB 控制端口",
+            subtitle = "PC 端设置 → 端口 → 控制端口 填同一个数字",
+            icon = Icons.Filled.Settings,
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        SettingsCardGroup {
+            Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                OutlinedTextField(
+                    value = portText,
+                    onValueChange = { input -> portText = input.filter { it.isDigit() }.take(5) },
+                    label = { Text("端口（1024–65535）") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            CardDivider()
+
+            Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        val port = portText.toIntOrNull()
+                        if (port == null || port !in 1024..65535) {
+                            Toast.makeText(context, "端口要在 1024–65535 之间", Toast.LENGTH_SHORT).show()
+                        } else {
+                            app.controller.applyControlPort(port)
+                            Toast.makeText(context, "控制端口已改为 $port，正在重连", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                ) {
+                    Text("应用并重连")
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        SettingsCard(
+            title = "WiFi 端口",
+            subtitle = "UDP ${ProtocolConstants.UDP_PORT}（固定）",
+            icon = Icons.Filled.Settings,
+        )
 
         SettingsPageBottomSpacer()
     }

@@ -1,6 +1,7 @@
 package com.padlink.app.pref
 
 import android.content.Context
+import com.padlink.core.ProtocolConstants
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -61,6 +62,9 @@ class AppPrefs(context: Context) {
     private var statusBarAppliedState by mutableStateOf(prefs.getBoolean(KEY_STATUS_BAR_APPLIED, false))
     private var hapticScaleState by mutableStateOf(prefs.getFloat(KEY_HAPTIC_SCALE, 1f))
     private var rumbleState by mutableStateOf(prefs.getBoolean(KEY_RUMBLE, true))
+    private var controlPortState by mutableStateOf(
+        prefs.getInt(KEY_CONTROL_PORT, ProtocolConstants.CONTROL_PORT).coerceIn(1024, 65535),
+    )
 
     var themeMode: ThemeMode
         get() = themeModeState
@@ -90,6 +94,15 @@ class AppPrefs(context: Context) {
         set(value) {
             hapticScaleState = value
             prefs.edit().putFloat(KEY_HAPTIC_SCALE, value).apply()
+        }
+
+    /** ADB 控制端口。PC 端设置里要填同一个数字。 */
+    var controlPort: Int
+        get() = controlPortState
+        set(value) {
+            val port = value.coerceIn(1024, 65535)
+            controlPortState = port
+            prefs.edit().putInt(KEY_CONTROL_PORT, port).apply()
         }
 
     /** 接收 PC 回传的游戏震动（手柄马达输出）。 */
@@ -146,6 +159,7 @@ class AppPrefs(context: Context) {
         const val KEY_HAPTIC = "hapticFeedback"
         const val KEY_HAPTIC_SCALE = "hapticScale"
         const val KEY_RUMBLE = "rumbleEnabled"
+        const val KEY_CONTROL_PORT = "controlPort"
         const val KEY_FREEZE = "freezeOnBackground"
         const val KEY_STATUS_BAR = "disableStatusBar"
         const val KEY_STATUS_BAR_APPLIED = "statusBarApplied"

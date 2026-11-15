@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import com.padlink.app.input.PadInputState
 import com.padlink.app.input.TiltSource
 import com.padlink.app.input.TiltStore
+import com.padlink.app.pref.AppPrefs
 import com.padlink.app.transport.FramePump
 import com.padlink.app.transport.PumpStats
 import com.padlink.app.transport.TcpTransport
@@ -37,6 +38,7 @@ class PadLinkController(
     private val scope: CoroutineScope,
     private val tilt: TiltSource,
     private val tiltStore: TiltStore,
+    private val prefs: AppPrefs,
 ) {
 
     val input = PadInputState()
@@ -95,10 +97,8 @@ class PadLinkController(
                     val transport = when (mode) {
                         // ADB 模式下手机连的是自己的 127.0.0.1：PC 端用 adb reverse
                         // 把设备上的这个端口引到自己身上（protocol.md §1.1）。
-                        TransportMode.ADB -> TcpTransport(
-                            host = ADB_LOOPBACK,
-                            port = ProtocolConstants.CONTROL_PORT,
-                        )
+                        // 设备端的监听端口可能被临时连接占住，按 PC 端同样的顺序试候选端口。
+                        TransportMode.ADB -> connectAdb()
 
                         TransportMode.WIFI -> UdpTransport(host, ProtocolConstants.UDP_PORT)
                     }
@@ -122,6 +122,16 @@ class PadLinkController(
                     scheduleAdbRetry()
                 }
         }
+    }
+
+    /** ADB 模式连本机；端口由两端设置决定，默认 42312。 */
+    private fun connectAdb(): TcpTransport =
+        TcpTransport(host = ADB_LOOPBACK, port = prefs.controlPort)
+
+    /** 改 ADB 控制端口并让当前连接按新端口重连。 */
+    fun applyControlPort(port: Int) {
+        prefs.controlPort = port
+        if (mode == TransportMode.ADB) connect()
     }
 
     fun disconnect() {

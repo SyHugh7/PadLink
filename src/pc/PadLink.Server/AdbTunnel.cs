@@ -63,12 +63,15 @@ public static class AdbTunnel
             .ToList();
     }
 
-    /// <summary>建立隧道。设备上连 localhost:port 就会打到主机的同一个端口。</summary>
-    public static (bool Ok, string Message) EstablishReverse(string adb, int port)
-        => RunChecked(adb, $"reverse tcp:{port} tcp:{port}");
+    /// <summary>
+    /// 建立隧道。设备上连 <c>localhost:devicePort</c> 会打到主机的 <paramref name="hostPort"/>。
+    /// 两个端口不必相同：设备端的监听端口可以被临时占用，换一个即可。
+    /// </summary>
+    public static (bool Ok, string Message) EstablishReverse(string adb, int devicePort, int hostPort)
+        => RunChecked(adb, $"reverse tcp:{devicePort} tcp:{hostPort}");
 
-    public static (bool Ok, string Message) RemoveReverse(string adb, int port)
-        => RunChecked(adb, $"reverse --remove tcp:{port}");
+    public static (bool Ok, string Message) RemoveReverse(string adb, int devicePort)
+        => RunChecked(adb, $"reverse --remove tcp:{devicePort}");
 
     public static (bool Ok, string Message) ListReverses(string adb)
         => RunChecked(adb, "reverse --list");

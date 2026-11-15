@@ -23,6 +23,7 @@ public sealed class PadLinkHost : IDisposable
     private CancellationTokenSource? _cts;
     private readonly List<Task> _loops = [];
     private string? _adbPath;               // 我们自己建的隧道，退出时要拆掉
+    private int _adbDevicePort;             // 设备端实际监听的端口（0 = 还没建）
     private string? _adb;                   // 找到的 adb 路径，缓存着别每 3 秒起一个进程
     private bool _disposed;
 
@@ -138,9 +139,17 @@ public sealed class PadLinkHost : IDisposable
         var devices = AdbTunnel.ListDevices(adb);
         if (devices.Count == 0) return (false, "没有已连接并授权的设备");
 
-        var (ok, message) = AdbTunnel.EstablishReverse(adb, TcpPort);
-        if (ok) _adbPath = adb;                 // 记住是谁建的，退出时要拆
-        return (ok, ok ? $"隧道已建立（{devices[0]} → localhost:{TcpPort}）" : message);
+        var (ok, message) = AdbTunnel.EstablishReverse(adb, TcpPort, TcpPort);
+        if (ok)
+        {
+            _adbPath = adb;                     // 记住是谁建的，退出时要拆
+            _adbDevicePort = TcpPort;
+        }
+
+        return (ok,
+            ok
+                ? $"隧道已建立（{devices[0]} → 端口 {TcpPort}）"
+                : $"端口 {TcpPort} 在手机上可能被占用，去两端设置里换一个相同的端口（{message}）");
     }
 
     /// <summary>
@@ -175,11 +184,12 @@ public sealed class PadLinkHost : IDisposable
 
                 if (_adbPath is not null) continue;      // 已经通了，别重复建
 
-                var (ok, _) = AdbTunnel.EstablishReverse(_adb, TcpPort);
+                var (ok, _) = AdbTunnel.EstablishReverse(_adb, TcpPort, TcpPort);
                 if (!ok) continue;                        // 授权弹窗还没点是常态，不吵
 
                 _adbPath = _adb;
-                Console.WriteLine($"ADB 隧道已建立：{devices[0]} → localhost:{TcpPort}");
+                _adbDevicePort = TcpPort;
+                Console.WriteLine($"ADB 隧道已建立：{devices[0]} → 端口 {TcpPort}");
             }
         }
         catch (OperationCanceledException)
@@ -216,9 +226,11 @@ public sealed class PadLinkHost : IDisposable
         // 拆掉我们自己建的隧道——别在用户机器上留一条 adb 端口转发。
         if (_adbPath is not null)
         {
-            var (ok, message) = AdbTunnel.RemoveReverse(_adbPath, TcpPort);
+            var devicePort = _adbDevicePort > 0 ? _adbDevicePort : TcpPort;
+            var (ok, message) = AdbTunnel.RemoveReverse(_adbPath, devicePort);
             Console.WriteLine(ok ? "ADB 隧道已拆除" : $"ADB 隧道拆除失败：{message}");
             _adbPath = null;
+            _adbDevicePort = 0;
         }
 
         _backend.Dispose();

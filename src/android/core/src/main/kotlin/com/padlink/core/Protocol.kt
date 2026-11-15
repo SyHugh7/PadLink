@@ -2,7 +2,7 @@ package com.padlink.core
 
 /** 端口、节拍、超时等协议常量。见 protocol/protocol.md §1 / §7。 */
 object ProtocolConstants {
-    /** 控制通道（TCP）。 */
+    /** 控制通道（TCP）。主机监听这个端口；ADB 模式下设备端监听端口从这里挑。 */
     const val CONTROL_PORT = 42312
 
     /** 发现 + 数据通道（UDP，PC 端单 socket 复用）。 */
