@@ -88,8 +88,14 @@ fun DPadPad(
                                 track(hit.position)
                                 hit.consume()
                             } else {
-                                // 滑出就归零；根手势会继续占住这根手指，不激活其他控件。
-                                release()
+                                // 滑出控件也继续按位置算值；只有抬手才归零。
+                                val activeChange = event.changes.firstOrNull { it.id == activeId }
+                                if (activeChange != null && activeChange.pressed) {
+                                    track(activeChange.position)
+                                    activeChange.consume()
+                                } else {
+                                    release()
+                                }
                             }
                         }
                     } finally {

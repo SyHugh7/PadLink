@@ -111,7 +111,7 @@ fun GamepadCanvas(
                     awaitPointerEventScope {
                         val active = mutableMapOf<PointerId, Int>()
                         val claimed = mutableMapOf<PointerId, RootHit>()
-                        val claimReleased = mutableSetOf<PointerId>()
+                        val triggerStrong = mutableMapOf<PointerId, Boolean>()
                         val input = controller.input
 
                         fun bitAt(position: Offset): Int? {
@@ -267,9 +267,9 @@ fun GamepadCanvas(
                             controller.push()
                         }
 
-                        fun applyTrigger(left: Boolean, position: Offset) {
+                        fun applyTrigger(left: Boolean, position: Offset): Boolean? {
                             val kind = if (left) PadElementKind.TRIGGER_LEFT else PadElementKind.TRIGGER_RIGHT
-                            val element = rootLayout.element(kind) ?: return
+                            val element = rootLayout.element(kind) ?: return null
                             val m = metrics(element)
                             val (_, ly) = local(position, m)
                             val gate = rootLayout.triggerGate
@@ -291,6 +291,7 @@ fun GamepadCanvas(
                                 input.rightTrigger = value
                             }
                             controller.push()
+                            return fromTop >= gateHeight
                         }
 
                         fun clearTrigger(left: Boolean) {
@@ -326,10 +327,22 @@ fun GamepadCanvas(
                             controller.push()
                         }
 
-                        fun applyClaim(hit: RootHit, position: Offset) {
+                        fun applyClaim(hit: RootHit, position: Offset, pointerId: PointerId? = null) {
                             when (hit) {
                                 is RootHit.Stick -> applyStick(hit.left, position)
-                                is RootHit.Trigger -> applyTrigger(hit.left, position)
+                                is RootHit.Trigger -> {
+                                    val strong = applyTrigger(hit.left, position) ?: return
+                                    if (pointerId != null) {
+                                        val previous = triggerStrong[pointerId]
+                                        if (previous == null) {
+                                            controller.haptic(if (strong) 30L else 20L)
+                                        } else if (previous != strong) {
+                                            controller.haptic(20L)
+                                        }
+                                        triggerStrong[pointerId] = strong
+                                    }
+                                }
+
                                 RootHit.DPad -> applyDpad(position)
                                 is RootHit.Button -> Unit
                             }
@@ -353,7 +366,7 @@ fun GamepadCanvas(
                                     if (!change.pressed) {
                                         claim?.let { releaseClaim(it) }
                                         claimed.remove(change.id)
-                                        claimReleased.remove(change.id)
+                                        triggerStrong.remove(change.id)
 
                                         active.remove(change.id)?.let {
                                             controller.setButton(it, false)
@@ -362,21 +375,10 @@ fun GamepadCanvas(
                                         continue
                                     }
 
-                                    // 这根手指已经被特殊控件占用：滑出就归零，但仍不激活其他控件。
+                                    // 这根手指已经被特殊控件占用：控件外也继续按位置算值，
+                                    // 但不让它触发别的控件。
                                     if (claim != null) {
-                                        val inside = when (claim) {
-                                            is RootHit.Stick -> stickAt(change.position) == claim.left
-                                            is RootHit.Trigger -> triggerAt(change.position) == claim.left
-                                            RootHit.DPad -> dpadAt(change.position)
-                                            is RootHit.Button -> false
-                                        }
-
-                                        if (inside) {
-                                            claimReleased.remove(change.id)
-                                            applyClaim(claim, change.position)
-                                        } else if (claimReleased.add(change.id)) {
-                                            releaseClaim(claim)
-                                        }
+                                        applyClaim(claim, change.position, change.id)
                                         continue
                                     }
 
@@ -403,8 +405,7 @@ fun GamepadCanvas(
 
                                     if (continuous != null) {
                                         claimed[change.id] = continuous
-                                        claimReleased.remove(change.id)
-                                        applyClaim(continuous, change.position)
+                                        applyClaim(continuous, change.position, change.id)
                                     }
                                 }
                             }
@@ -413,7 +414,7 @@ fun GamepadCanvas(
                             claimed.values.forEach { releaseClaim(it) }
                             active.clear()
                             claimed.clear()
-                            claimReleased.clear()
+                            triggerStrong.clear()
                             rootPressed = emptySet()
                             rootStickLeft = null
                             rootStickRight = null
@@ -665,7 +666,7 @@ private fun ElementContent(
             label = "LT",
             modifier = Modifier.fillMaxSize(),
             valueOverride = rootTriggerLeft,
-            onHaptic = { controller.haptic(it) },
+            onHaptic = { },
         ) { value ->
             input.leftTrigger = value
             controller.push()
@@ -676,7 +677,7 @@ private fun ElementContent(
             label = "RT",
             modifier = Modifier.fillMaxSize(),
             valueOverride = rootTriggerRight,
-            onHaptic = { controller.haptic(it) },
+            onHaptic = { },
         ) { value ->
             input.rightTrigger = value
             controller.push()
