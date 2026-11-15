@@ -179,7 +179,11 @@ class PadLinkController(
     }
 
     fun setButton(bit: Int, pressed: Boolean) {
-        input.buttons = if (pressed) input.buttons or bit else input.buttons and bit.inv()
+        val before = input.buttons
+        val after = if (pressed) before or bit else before and bit.inv()
+        if (after == before) return
+
+        input.buttons = after
         if (pressed) onHaptic?.invoke(30L)
         push()
     }

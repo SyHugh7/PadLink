@@ -23,6 +23,7 @@ import kotlin.math.min
 @Composable
 fun StickPad(
     modifier: Modifier = Modifier,
+    knobOverride: Offset? = null,
     onEngaged: (Boolean) -> Unit = {},
     onChange: (x: Float, y: Float) -> Unit = { _, _ -> },
 ) {
@@ -80,7 +81,9 @@ fun StickPad(
                                 track(hit.position)
                                 hit.consume()
                             } else {
-                                release()
+                                // 滑出空白时保持最后的值；只有抬手才释放。
+                                val stillDown = event.changes.any { it.id == activeId && it.pressed }
+                                if (!stillDown) release()
                             }
                         }
                     } finally {
@@ -93,6 +96,7 @@ fun StickPad(
         val radius = min(size.width, size.height) / 2f
         val maxTravel = radius * 0.62f
         val knobRadius = radius * 0.40f
+        val shown = knobOverride ?: knob
 
         // 底盘 → 内凹 → 摇杆头，三层就够，不加十字线（容易显得乱）。
         drawCircle(color = colors.stickBase, radius = radius, center = center)
@@ -104,9 +108,9 @@ fun StickPad(
             style = Stroke(radius * 0.045f),
         )
         drawCircle(
-            color = if (pressed) colors.stickKnobPressed else colors.stickKnob,
+            color = if (pressed || shown != Offset.Zero) colors.stickKnobPressed else colors.stickKnob,
             radius = knobRadius,
-            center = center + knob * maxTravel,
+            center = center + shown * maxTravel,
         )
     }
 }

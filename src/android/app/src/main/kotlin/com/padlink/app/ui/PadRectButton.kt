@@ -29,9 +29,11 @@ fun PadRectButton(
     label: String,
     modifier: Modifier = Modifier,
     labelSize: TextUnit = 15.sp,
+    pressedOverride: Boolean? = null,
     onPressChange: (Boolean) -> Unit = {},
 ) {
     var pressed by remember { mutableStateOf(false) }
+    val isPressed = pressedOverride ?: pressed
     val colors = LocalPadPalette.current
 
     Box(
@@ -76,7 +78,7 @@ fun PadRectButton(
             .drawBehind {
                 val corner = CornerRadius(size.height * 0.26f)
                 drawRoundRect(
-                    color = if (pressed) colors.facePressed else colors.face,
+                    color = if (isPressed) colors.facePressed else colors.face,
                     cornerRadius = corner,
                 )
                 drawRoundRect(
@@ -89,7 +91,7 @@ fun PadRectButton(
     ) {
         Text(
             text = label,
-            color = if (pressed) colors.labelPressed else colors.label,
+            color = if (isPressed) colors.labelPressed else colors.label,
             fontSize = labelSize,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,

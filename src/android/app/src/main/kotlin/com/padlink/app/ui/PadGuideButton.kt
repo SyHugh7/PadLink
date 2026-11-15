@@ -32,9 +32,11 @@ import com.padlink.app.ui.theme.LocalPadPalette
 @Composable
 fun PadGuideButton(
     modifier: Modifier = Modifier,
+    pressedOverride: Boolean? = null,
     onPressChange: (Boolean) -> Unit = {},
 ) {
     var pressed by remember { mutableStateOf(false) }
+    val isPressed = pressedOverride ?: pressed
     val colors = LocalPadPalette.current
     val logo: Painter = painterResource(R.drawable.ic_xbox)
 
@@ -82,7 +84,7 @@ fun PadGuideButton(
             }
             .drawBehind {
                 val radius = minOf(size.width, size.height) / 2f
-                drawCircle(color = if (pressed) colors.facePressed else colors.face, radius = radius)
+                drawCircle(color = if (isPressed) colors.facePressed else colors.face, radius = radius)
                 drawCircle(color = colors.hairline, radius = radius, style = Stroke(radius * 0.06f))
             },
         contentAlignment = Alignment.Center,
@@ -91,7 +93,7 @@ fun PadGuideButton(
             painter = logo,
             contentDescription = "Guide",
             contentScale = ContentScale.Fit,
-            colorFilter = ColorFilter.tint(if (pressed) colors.labelPressed else colors.label),
+            colorFilter = ColorFilter.tint(if (isPressed) colors.labelPressed else colors.label),
             modifier = Modifier.fillMaxSize(0.50f),
         )
     }

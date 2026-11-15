@@ -47,21 +47,23 @@ fun TriggerSlider(
     modifier: Modifier = Modifier,
     label: String = "",
     gate: Float = PadLayout.DEFAULT_TRIGGER_GATE,
+    valueOverride: Float? = null,
     onHaptic: (Long) -> Unit = {},
     onChange: (Float) -> Unit = {},
 ) {
     var value by remember { mutableFloatStateOf(0f) }
     var pressed by remember { mutableStateOf(false) }
+    val shown = valueOverride ?: value
     val colors = LocalPadPalette.current
 
     // 按下去必须看得见：弱加载区里值恒为 0，光盯填充根本判断不出到底抓住没有。
     val gateFill by animateColorAsState(
-        targetValue = if (pressed) colors.triggerGatePressed else colors.triggerGate,
+        targetValue = if (pressed || shown > 0f) colors.triggerGatePressed else colors.triggerGate,
         animationSpec = tween(120),
         label = "gateFill",
     )
     val barStroke by animateColorAsState(
-        targetValue = if (pressed) colors.triggerOutlinePressed else colors.triggerOutline,
+        targetValue = if (pressed || shown > 0f) colors.triggerOutlinePressed else colors.triggerOutline,
         animationSpec = tween(120),
         label = "barStroke",
     )
@@ -128,7 +130,9 @@ fun TriggerSlider(
                                 track(hit.position)
                                 hit.consume()
                             } else {
-                                release()
+                                // 滑出空白时保持最后的值；只有抬手才释放。
+                                val stillDown = event.changes.any { it.id == activeId && it.pressed }
+                                if (!stillDown) release()
                             }
                         }
                     } finally {
@@ -156,11 +160,11 @@ fun TriggerSlider(
                     drawRect(color = gateFill, size = Size(size.width, gateHeight))
                 }
 
-                if (value > 0f) {
+                if (shown > 0f) {
                     drawRect(
                         color = colors.triggerFill,
                         topLeft = Offset(0f, gateHeight),
-                        size = Size(size.width, travel * value),
+                        size = Size(size.width, travel * shown),
                     )
                 }
             }

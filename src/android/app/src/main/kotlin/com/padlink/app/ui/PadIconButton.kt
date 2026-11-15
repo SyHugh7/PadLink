@@ -35,9 +35,11 @@ enum class PadIcon {
 fun PadIconButton(
     icon: PadIcon,
     modifier: Modifier = Modifier,
+    pressedOverride: Boolean? = null,
     onPressChange: (Boolean) -> Unit = {},
 ) {
     var pressed by remember { mutableStateOf(false) }
+    val isPressed = pressedOverride ?: pressed
     val colors = LocalPadPalette.current
 
     Box(
@@ -84,13 +86,13 @@ fun PadIconButton(
             }
             .drawBehind {
                 val radius = minOf(size.width, size.height) / 2f
-                val face = if (pressed) colors.facePressed else colors.face
+                val face = if (isPressed) colors.facePressed else colors.face
 
                 drawCircle(color = face, radius = radius)
                 drawCircle(color = colors.hairline, radius = radius, style = Stroke(radius * 0.06f))
                 drawXboxIcon(
                     icon = icon,
-                    color = if (pressed) colors.labelPressed else colors.label,
+                    color = if (isPressed) colors.labelPressed else colors.label,
                     background = face,
                 )
             },

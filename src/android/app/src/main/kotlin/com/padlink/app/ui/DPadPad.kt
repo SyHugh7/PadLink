@@ -28,6 +28,7 @@ import kotlin.math.min
 @Composable
 fun DPadPad(
     modifier: Modifier = Modifier,
+    activeOverride: DPad? = null,
     onHaptic: (Long) -> Unit = {},
     onDirection: (DPad) -> Unit = {},
 ) {
@@ -87,7 +88,9 @@ fun DPadPad(
                                 track(hit.position)
                                 hit.consume()
                             } else {
-                                release()
+                                // 滑出空白时保持最后的值；只有抬手才释放。
+                                val stillDown = event.changes.any { it.id == activeId && it.pressed }
+                                if (!stillDown) release()
                             }
                         }
                     } finally {
@@ -98,14 +101,15 @@ fun DPadPad(
     ) {
         val center = Offset(size.width / 2f, size.height / 2f)
         val radius = min(size.width, size.height) / 2f
+        val shown = activeOverride ?: active
 
         drawCircle(color = colors.stickBase, radius = radius, center = center)
 
         // 按下方向的扇形，垫在内圈下面，看起来像外环亮了一格。
-        if (active != DPad.NEUTRAL) {
+        if (shown != DPad.NEUTRAL) {
             drawArc(
                 color = colors.dpadArc,
-                startAngle = degreesToStartAngle(active) - 22.5f,
+                startAngle = degreesToStartAngle(shown) - 22.5f,
                 sweepAngle = 45f,
                 useCenter = true,
                 topLeft = Offset(center.x - radius, center.y - radius),
@@ -125,7 +129,7 @@ fun DPadPad(
         drawRect(armColor, Offset(center.x + thickness / 2f, center.y - thickness / 2f), Size(arm - thickness, thickness))
 
         drawCircle(
-            color = if (active != DPad.NEUTRAL) colors.dpadCenterPressed else colors.dpadCenter,
+            color = if (shown != DPad.NEUTRAL) colors.dpadCenterPressed else colors.dpadCenter,
             radius = radius * 0.15f,
             center = center,
         )

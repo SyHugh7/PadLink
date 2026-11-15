@@ -31,9 +31,11 @@ fun PadButton(
     label: String,
     modifier: Modifier = Modifier,
     labelSize: TextUnit = 16.sp,
+    pressedOverride: Boolean? = null,
     onPressChange: (Boolean) -> Unit = {},
 ) {
     var pressed by remember { mutableStateOf(false) }
+    val isPressed = pressedOverride ?: pressed
     val colors = LocalPadPalette.current
 
     Box(
@@ -80,14 +82,14 @@ fun PadButton(
             }
             .drawBehind {
                 val radius = minOf(size.width, size.height) / 2f
-                drawCircle(color = if (pressed) colors.facePressed else colors.face, radius = radius)
+                drawCircle(color = if (isPressed) colors.facePressed else colors.face, radius = radius)
                 drawCircle(color = colors.hairline, radius = radius, style = Stroke(radius * 0.06f))
             },
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
-            color = if (pressed) colors.labelPressed else colors.label,
+            color = if (isPressed) colors.labelPressed else colors.label,
             fontSize = labelSize,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,

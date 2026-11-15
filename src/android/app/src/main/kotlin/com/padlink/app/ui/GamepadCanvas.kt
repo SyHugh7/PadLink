@@ -46,6 +46,19 @@ import com.padlink.app.layout.TriggerStyle
 import com.padlink.app.ui.theme.LocalPadPalette
 import com.padlink.core.DPad
 import com.padlink.core.GamepadButtons
+import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.sin
+
+/** 画布根手势命中的输入类型。 */
+private sealed interface RootHit {
+    data class Button(val bit: Int) : RootHit
+    data class Stick(val left: Boolean) : RootHit
+    data class Trigger(val left: Boolean) : RootHit
+    object DPad : RootHit
+}
 
 /** 编辑模式下选中的东西：整个控件，或某个控件里的一个子键。 */
 sealed interface Selection {
@@ -77,7 +90,293 @@ fun GamepadCanvas(
     onLayoutChange: (PadLayout) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    BoxWithConstraints(modifier) {
+    val rootLayout by rememberUpdatedState(layout)
+
+    // 根手势当前命中的离散按键；控件用它显示按下态，手指滑过时也能换键。
+    var rootPressed by remember { mutableStateOf<Set<Int>>(emptySet()) }
+
+    BoxWithConstraints(
+        modifier.then(
+            if (editing) {
+                Modifier
+            } else {
+                // 手指滑过哪个离散按键就触发哪个——命中测试放在画布根节点，
+                // 不跟某一个按键的 pointerInput 绑定。
+                Modifier.pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        val active = mutableMapOf<PointerId, Int>()
+                        val stickActive = mutableMapOf<PointerId, Boolean>()
+                        val triggerActive = mutableMapOf<PointerId, Boolean>()
+                        val dpadActive = mutableSetOf<PointerId>()
+                        val input = controller.input
+
+                        fun bitAt(position: Offset): Int? {
+                            val current = rootLayout
+                            val canvasWidth = size.width.toFloat()
+                            val canvasHeight = size.height.toFloat()
+
+                            for (element in current.elements) {
+                                if (!element.enabled) continue
+
+                                val cx = canvasWidth * element.x
+                                val cy = canvasHeight * element.y
+                                val w = canvasWidth * element.size
+                                val h = w * current.aspectOf(element.kind)
+                                val angle = Math.toRadians(-element.rotation.toDouble())
+                                val cosA = cos(angle).toFloat()
+                                val sinA = sin(angle).toFloat()
+                                val dx = position.x - cx
+                                val dy = position.y - cy
+                                val lx = dx * cosA - dy * sinA
+                                val ly = dx * sinA + dy * cosA
+
+                                when (element.kind) {
+                                    PadElementKind.ABXY_GROUP -> {
+                                        for (key in current.subKeys[element.kind].orEmpty()) {
+                                            if (!key.enabled) continue
+                                            val bit = AbxyBits[key.label] ?: continue
+                                            val kx = key.dx * w
+                                            val ky = key.dy * h
+                                            val kr = key.scale * w / 2f
+                                            if (hypot(lx - kx, ly - ky) <= kr) return bit
+                                        }
+                                    }
+
+                                    PadElementKind.SHOULDER_LEFT ->
+                                        if (abs(lx) <= w / 2f && abs(ly) <= h / 2f) {
+                                            return GamepadButtons.LEFT_SHOULDER
+                                        }
+
+                                    PadElementKind.SHOULDER_RIGHT ->
+                                        if (abs(lx) <= w / 2f && abs(ly) <= h / 2f) {
+                                            return GamepadButtons.RIGHT_SHOULDER
+                                        }
+
+                                    PadElementKind.BACK ->
+                                        if (hypot(lx, ly) <= minOf(w, h) / 2f) return GamepadButtons.BACK
+
+                                    PadElementKind.START ->
+                                        if (hypot(lx, ly) <= minOf(w, h) / 2f) return GamepadButtons.START
+
+                                    PadElementKind.GUIDE ->
+                                        if (hypot(lx, ly) <= minOf(w, h) / 2f) return GamepadButtons.GUIDE
+
+                                    PadElementKind.STICK_LEFT_BUTTON ->
+                                        if (hypot(lx, ly) <= minOf(w, h) / 2f) {
+                                            return GamepadButtons.LEFT_THUMB
+                                        }
+
+                                    PadElementKind.STICK_RIGHT_BUTTON ->
+                                        if (hypot(lx, ly) <= minOf(w, h) / 2f) {
+                                            return GamepadButtons.RIGHT_THUMB
+                                        }
+
+                                    else -> Unit
+                                }
+                            }
+
+                            return null
+                        }
+
+                        fun metrics(element: PadElement): FloatArray {
+                            val current = rootLayout
+                            val cx = size.width.toFloat() * element.x
+                            val cy = size.height.toFloat() * element.y
+                            val w = size.width.toFloat() * element.size
+                            val h = w * current.aspectOf(element.kind)
+                            val angle = Math.toRadians(-element.rotation.toDouble())
+                            return floatArrayOf(cx, cy, w, h, cos(angle).toFloat(), sin(angle).toFloat())
+                        }
+
+                        fun local(position: Offset, m: FloatArray): Pair<Float, Float> {
+                            val dx = position.x - m[0]
+                            val dy = position.y - m[1]
+                            return (dx * m[4] - dy * m[5]) to (dx * m[5] + dy * m[4])
+                        }
+
+                        fun stickAt(position: Offset): Boolean? {
+                            for (left in listOf(true, false)) {
+                                val kind = if (left) PadElementKind.LEFT_STICK else PadElementKind.RIGHT_STICK
+                                val element = rootLayout.element(kind) ?: continue
+                                val m = metrics(element)
+                                val (lx, ly) = local(position, m)
+                                if (hypot(lx, ly) <= minOf(m[2], m[3]) / 2f) return left
+                            }
+                            return null
+                        }
+
+                        fun triggerAt(position: Offset): Boolean? {
+                            if (rootLayout.triggerStyle != TriggerStyle.SLIDE) return null
+                            for (left in listOf(true, false)) {
+                                val kind = if (left) PadElementKind.TRIGGER_LEFT else PadElementKind.TRIGGER_RIGHT
+                                val element = rootLayout.element(kind) ?: continue
+                                val m = metrics(element)
+                                val (lx, ly) = local(position, m)
+                                if (abs(lx) <= m[2] / 2f && abs(ly) <= m[3] / 2f) return left
+                            }
+                            return null
+                        }
+
+                        fun dpadAt(position: Offset): Boolean {
+                            if (rootLayout.dpadStyle != DPadStyle.COMBO) return false
+                            val element = rootLayout.element(PadElementKind.DPAD) ?: return false
+                            val m = metrics(element)
+                            val (lx, ly) = local(position, m)
+                            return hypot(lx, ly) <= minOf(m[2], m[3]) / 2f
+                        }
+
+                        fun applyStick(left: Boolean, position: Offset) {
+                            val kind = if (left) PadElementKind.LEFT_STICK else PadElementKind.RIGHT_STICK
+                            val element = rootLayout.element(kind) ?: return
+                            val m = metrics(element)
+                            val (lx, ly) = local(position, m)
+                            val maxTravel = minOf(m[2], m[3]) / 2f * 0.62f
+                            if (maxTravel <= 0f) return
+
+                            val distance = hypot(lx, ly)
+                            val scale = if (distance > maxTravel && distance > 0f) maxTravel / distance else 1f
+                            val nx = (lx * scale / maxTravel).coerceIn(-1f, 1f)
+                            val ny = (ly * scale / maxTravel).coerceIn(-1f, 1f)
+
+                            if (left) {
+                                input.setStickEngaged(true)
+                                input.setLeftStick(nx, ny)
+                            } else {
+                                input.rightX = nx
+                                input.rightY = ny
+                            }
+                            controller.push()
+                        }
+
+                        fun clearStick(left: Boolean) {
+                            if (left) {
+                                input.setStickEngaged(false)
+                                input.setLeftStick(0f, 0f)
+                            } else {
+                                input.rightX = 0f
+                                input.rightY = 0f
+                            }
+                            controller.push()
+                        }
+
+                        fun applyTrigger(left: Boolean, position: Offset) {
+                            val kind = if (left) PadElementKind.TRIGGER_LEFT else PadElementKind.TRIGGER_RIGHT
+                            val element = rootLayout.element(kind) ?: return
+                            val m = metrics(element)
+                            val (_, ly) = local(position, m)
+                            val gate = rootLayout.triggerGate
+                                .coerceIn(PadLayout.MIN_TRIGGER_GATE, PadLayout.MAX_TRIGGER_GATE)
+                            val gateHeight = m[3] * gate
+                            val travel = (m[3] - gateHeight).coerceAtLeast(1f)
+                            val fromTop = ly + m[3] / 2f
+                            val value = if (fromTop < gateHeight) {
+                                0f
+                            } else {
+                                ((fromTop - gateHeight) / travel).coerceIn(0f, 1f)
+                            }
+
+                            if (left) input.leftTrigger = value else input.rightTrigger = value
+                            controller.push()
+                        }
+
+                        fun clearTrigger(left: Boolean) {
+                            if (left) input.leftTrigger = 0f else input.rightTrigger = 0f
+                            controller.push()
+                        }
+
+                        fun applyDpad(position: Offset) {
+                            val element = rootLayout.element(PadElementKind.DPAD) ?: return
+                            val m = metrics(element)
+                            val (lx, ly) = local(position, m)
+                            val deadZone = minOf(m[2], m[3]) * 0.16f
+                            val direction = if (hypot(lx, ly) < deadZone) {
+                                DPad.NEUTRAL
+                            } else {
+                                directionFromDegrees(Math.toDegrees(atan2(-ly.toDouble(), lx.toDouble())))
+                            }
+
+                            input.dpad = direction
+                            controller.push()
+                        }
+
+                        fun clearDpad() {
+                            input.dpad = DPad.NEUTRAL
+                            controller.push()
+                        }
+
+                        try {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                for (change in event.changes) {
+                                    val buttonNext = if (change.pressed) bitAt(change.position) else null
+                                    val buttonPrev = active[change.id]
+                                    if (buttonNext != buttonPrev) {
+                                        buttonPrev?.let { controller.setButton(it, false) }
+                                        buttonNext?.let { controller.setButton(it, true) }
+                                        if (buttonNext == null) active.remove(change.id) else active[change.id] = buttonNext
+                                        rootPressed = active.values.toSet()
+                                    }
+
+                                    if (!change.pressed) {
+                                        stickActive.remove(change.id)?.let { clearStick(it) }
+                                        triggerActive.remove(change.id)?.let { clearTrigger(it) }
+                                        if (dpadActive.remove(change.id)) clearDpad()
+                                        continue
+                                    }
+
+                                    // 按在离散按键上时，连续控件让位。
+                                    if (buttonNext != null) {
+                                        stickActive.remove(change.id)?.let { clearStick(it) }
+                                        triggerActive.remove(change.id)?.let { clearTrigger(it) }
+                                        if (dpadActive.remove(change.id)) clearDpad()
+                                        continue
+                                    }
+
+                                    val stick = stickAt(change.position)
+                                    val trigger = if (stick == null) triggerAt(change.position) else null
+                                    val onDpad = stick == null && trigger == null && dpadAt(change.position)
+
+                                    if (stick != null) {
+                                        if (stickActive[change.id] != stick) {
+                                            stickActive[change.id]?.let { clearStick(it) }
+                                            stickActive[change.id] = stick
+                                        }
+                                        triggerActive.remove(change.id)?.let { clearTrigger(it) }
+                                        if (dpadActive.remove(change.id)) clearDpad()
+                                        applyStick(stick, change.position)
+                                    } else if (trigger != null) {
+                                        stickActive.remove(change.id)?.let { clearStick(it) }
+                                        if (triggerActive[change.id] != trigger) {
+                                            triggerActive[change.id]?.let { clearTrigger(it) }
+                                            triggerActive[change.id] = trigger
+                                        }
+                                        if (dpadActive.remove(change.id)) clearDpad()
+                                        applyTrigger(trigger, change.position)
+                                    } else if (onDpad) {
+                                        stickActive.remove(change.id)?.let { clearStick(it) }
+                                        triggerActive.remove(change.id)?.let { clearTrigger(it) }
+                                        dpadActive.add(change.id)
+                                        applyDpad(change.position)
+                                    }
+                                    // 滑到空白：连续控件保持最后的值，直到抬手。
+                                }
+                            }
+                        } finally {
+                            active.values.forEach { controller.setButton(it, false) }
+                            stickActive.values.forEach { clearStick(it) }
+                            triggerActive.values.forEach { clearTrigger(it) }
+                            if (dpadActive.isNotEmpty()) clearDpad()
+                            active.clear()
+                            stickActive.clear()
+                            triggerActive.clear()
+                            dpadActive.clear()
+                            rootPressed = emptySet()
+                        }
+                    }
+                }
+            },
+        ),
+    ) {
         val screenWidth = maxWidth
         val screenHeight = maxHeight
         val screenWidthPx = with(LocalDensity.current) { screenWidth.toPx() }
@@ -151,7 +450,7 @@ fun GamepadCanvas(
                             SubKeyEditor(element.kind, layout, selection, onSelectionChange, onLayoutChange)
 
                         editing -> ElementOutline(element, isSelected)
-                        element.enabled -> ElementContent(element, layout, controller)
+                        element.enabled -> ElementContent(element, layout, controller, rootPressed)
                     }
                 }
             }
@@ -242,12 +541,18 @@ private fun Modifier.selectionPaint(): Modifier {
 
 /** 每个控件的宽高比见 [PadLayout.aspectOf]——放在数据模型上，测试也要用。 */
 @Composable
-private fun ElementContent(element: PadElement, layout: PadLayout, controller: PadLinkController) {
+private fun ElementContent(
+    element: PadElement,
+    layout: PadLayout,
+    controller: PadLinkController,
+    rootPressed: Set<Int>,
+) {
     val input = controller.input
 
     when (element.kind) {
         PadElementKind.LEFT_STICK -> StickPad(
             modifier = Modifier.fillMaxSize(),
+            knobOverride = Offset(input.leftX, input.leftY),
             onEngaged = {
                 input.setStickEngaged(it)
                 // 重力转向开着时，碰左摇杆是为了让位/微调，不震；L3 仍走 setButton。
@@ -260,6 +565,7 @@ private fun ElementContent(element: PadElement, layout: PadLayout, controller: P
 
         PadElementKind.RIGHT_STICK -> StickPad(
             Modifier.fillMaxSize(),
+            knobOverride = Offset(input.rightX, input.rightY),
             onEngaged = { if (it) controller.haptic(30) },
         ) { x, y ->
             input.rightX = x
@@ -270,6 +576,7 @@ private fun ElementContent(element: PadElement, layout: PadLayout, controller: P
         PadElementKind.DPAD -> when (layout.dpadStyle) {
             DPadStyle.COMBO -> DPadPad(
                 Modifier.fillMaxSize(),
+                activeOverride = input.dpad,
                 onHaptic = { controller.haptic(it) },
             ) { direction ->
                 input.dpad = direction
@@ -282,7 +589,10 @@ private fun ElementContent(element: PadElement, layout: PadLayout, controller: P
             }
         }
 
-        PadElementKind.ABXY_GROUP -> AbxyCluster(layout.subKeys[PadElementKind.ABXY_GROUP].orEmpty()) { bit, down ->
+        PadElementKind.ABXY_GROUP -> AbxyCluster(
+            keys = layout.subKeys[PadElementKind.ABXY_GROUP].orEmpty(),
+            pressedBits = rootPressed,
+        ) { bit, down ->
             controller.setButton(bit, down)
         }
 
@@ -290,6 +600,7 @@ private fun ElementContent(element: PadElement, layout: PadLayout, controller: P
             layout = layout,
             label = "LT",
             modifier = Modifier.fillMaxSize(),
+            valueOverride = input.leftTrigger,
             onHaptic = { controller.haptic(it) },
         ) { value ->
             input.leftTrigger = value
@@ -300,37 +611,67 @@ private fun ElementContent(element: PadElement, layout: PadLayout, controller: P
             layout = layout,
             label = "RT",
             modifier = Modifier.fillMaxSize(),
+            valueOverride = input.rightTrigger,
             onHaptic = { controller.haptic(it) },
         ) { value ->
             input.rightTrigger = value
             controller.push()
         }
 
-        PadElementKind.SHOULDER_LEFT -> PadRectButton("LB", Modifier.fillMaxSize()) { down ->
+        PadElementKind.SHOULDER_LEFT -> PadRectButton(
+            "LB",
+            Modifier.fillMaxSize(),
+            pressedOverride = rootPressed.contains(GamepadButtons.LEFT_SHOULDER),
+        ) { down ->
             controller.setButton(GamepadButtons.LEFT_SHOULDER, down)
         }
 
-        PadElementKind.SHOULDER_RIGHT -> PadRectButton("RB", Modifier.fillMaxSize()) { down ->
+        PadElementKind.SHOULDER_RIGHT -> PadRectButton(
+            "RB",
+            Modifier.fillMaxSize(),
+            pressedOverride = rootPressed.contains(GamepadButtons.RIGHT_SHOULDER),
+        ) { down ->
             controller.setButton(GamepadButtons.RIGHT_SHOULDER, down)
         }
 
-        PadElementKind.BACK -> PadIconButton(PadIcon.VIEW, Modifier.fillMaxSize()) { down ->
+        PadElementKind.BACK -> PadIconButton(
+            PadIcon.VIEW,
+            Modifier.fillMaxSize(),
+            pressedOverride = rootPressed.contains(GamepadButtons.BACK),
+        ) { down ->
             controller.setButton(GamepadButtons.BACK, down)
         }
 
-        PadElementKind.START -> PadIconButton(PadIcon.MENU, Modifier.fillMaxSize()) { down ->
+        PadElementKind.START -> PadIconButton(
+            PadIcon.MENU,
+            Modifier.fillMaxSize(),
+            pressedOverride = rootPressed.contains(GamepadButtons.START),
+        ) { down ->
             controller.setButton(GamepadButtons.START, down)
         }
 
-        PadElementKind.GUIDE -> PadGuideButton(Modifier.fillMaxSize()) { down ->
+        PadElementKind.GUIDE -> PadGuideButton(
+            Modifier.fillMaxSize(),
+            pressedOverride = rootPressed.contains(GamepadButtons.GUIDE),
+        ) { down ->
             controller.setButton(GamepadButtons.GUIDE, down)
         }
 
-        PadElementKind.STICK_LEFT_BUTTON -> PadButton("L3", Modifier.fillMaxSize(), labelSize = 13.sp) { down ->
+        PadElementKind.STICK_LEFT_BUTTON -> PadButton(
+            "L3",
+            Modifier.fillMaxSize(),
+            labelSize = 13.sp,
+            pressedOverride = rootPressed.contains(GamepadButtons.LEFT_THUMB),
+        ) { down ->
             controller.setButton(GamepadButtons.LEFT_THUMB, down)
         }
 
-        PadElementKind.STICK_RIGHT_BUTTON -> PadButton("R3", Modifier.fillMaxSize(), labelSize = 13.sp) { down ->
+        PadElementKind.STICK_RIGHT_BUTTON -> PadButton(
+            "R3",
+            Modifier.fillMaxSize(),
+            labelSize = 13.sp,
+            pressedOverride = rootPressed.contains(GamepadButtons.RIGHT_THUMB),
+        ) { down ->
             controller.setButton(GamepadButtons.RIGHT_THUMB, down)
         }
     }
@@ -345,7 +686,11 @@ private val AbxyBits = mapOf(
 
 /** ABXY：位置和大小全部来自布局里的子键，所以每个键都能单独挪。 */
 @Composable
-private fun AbxyCluster(keys: List<SubKey>, onButton: (Int, Boolean) -> Unit) {
+private fun AbxyCluster(
+    keys: List<SubKey>,
+    pressedBits: Set<Int>,
+    onButton: (Int, Boolean) -> Unit,
+) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val width = maxWidth
         val height = maxHeight
@@ -360,7 +705,11 @@ private fun AbxyCluster(keys: List<SubKey>, onButton: (Int, Boolean) -> Unit) {
                     .offset(x = width * (0.5f + key.dx) - keySize / 2, y = height * (0.5f + key.dy) - keySize / 2)
                     .size(keySize),
             ) {
-                PadButton(key.label, Modifier.fillMaxSize()) { down -> onButton(bit, down) }
+                PadButton(
+                    label = key.label,
+                    modifier = Modifier.fillMaxSize(),
+                    pressedOverride = pressedBits.contains(bit),
+                ) { down -> onButton(bit, down) }
             }
         }
     }
@@ -579,11 +928,12 @@ private fun TriggerOrButton(
     layout: PadLayout,
     label: String,
     modifier: Modifier,
+    valueOverride: Float?,
     onHaptic: (Long) -> Unit,
     onChange: (Float) -> Unit,
 ) {
     when (layout.triggerStyle) {
-        TriggerStyle.SLIDE -> TriggerSlider(modifier, label, layout.triggerGate, onHaptic, onChange)
+        TriggerStyle.SLIDE -> TriggerSlider(modifier, label, layout.triggerGate, valueOverride, onHaptic, onChange)
         TriggerStyle.BUTTON -> PadRectButton(label, modifier) { down -> onChange(if (down) 1f else 0f) }
     }
 }
