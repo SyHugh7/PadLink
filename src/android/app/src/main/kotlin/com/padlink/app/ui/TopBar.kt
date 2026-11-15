@@ -116,9 +116,13 @@ private fun RowScope.EditTools(
     }
 }
 
-private fun statusOf(controller: PadLinkController): Pair<String, Color> = when (val status = controller.status) {
-    is LinkStatus.Idle -> "未连接" to Color(0xFF9E9E9E)
-    is LinkStatus.Connecting -> "连接中…" to Color(0xFFFFB74D)
-    is LinkStatus.Connected -> "${status.describe} · ${controller.stats.framesSent} 帧" to Color(0xFF81C784)
-    is LinkStatus.Failed -> status.message to Color(0xFFE57373)
+@Composable
+private fun statusOf(controller: PadLinkController): Pair<String, Color> {
+    val scheme = MaterialTheme.colorScheme
+    return when (val status = controller.status) {
+        is LinkStatus.Idle -> "未连接" to scheme.error
+        is LinkStatus.Connecting -> "连接中…" to scheme.tertiary
+        is LinkStatus.Connected -> "${status.describe} · ${controller.stats.framesSent} 帧" to scheme.primary
+        is LinkStatus.Failed -> status.message to scheme.error
+    }
 }

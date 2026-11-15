@@ -353,6 +353,18 @@ public sealed class MainForm : Form
         base.Dispose(disposing);
     }
 
+    /// <summary>第二个实例发来恢复消息：从托盘叫回窗口。</summary>
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == Program.RestoreMessage)
+        {
+            RestoreFromTray();
+            return;
+        }
+
+        base.WndProc(ref m);
+    }
+
     /// <summary>让标题栏也跟着变深，否则窗口边框那条白跟里面的深色底格格不入。</summary>
     protected override void OnHandleCreated(EventArgs e)
     {
@@ -388,9 +400,13 @@ public sealed class MainForm : Form
             _host?.Dispose();
             _host = null;
 
+            var message = ex is SocketException { SocketErrorCode: SocketError.AddressAlreadyInUse }
+                ? $"端口 {ProtocolConstants.UdpPort} 已被占用，可能已有一个 PadLink 在运行（看任务栏托盘）。"
+                : ex.Message;
+
             // 不弹 MessageBox：模态框会把界面卡住等人点，而完整堆栈日志里已经有了。
             Console.WriteLine($"启动失败：{ex}");
-            _statusLabel.Text = $"启动失败：{ex.Message}";
+            _statusLabel.Text = $"启动失败：{message}";
             _statusLabel.ForeColor = PadTheme.Error;
             return;
         }

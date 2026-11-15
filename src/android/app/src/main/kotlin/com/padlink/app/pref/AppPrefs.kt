@@ -60,6 +60,7 @@ class AppPrefs(context: Context) {
     private var statusBarState by mutableStateOf(prefs.getBoolean(KEY_STATUS_BAR, false))
     private var statusBarAppliedState by mutableStateOf(prefs.getBoolean(KEY_STATUS_BAR_APPLIED, false))
     private var hapticScaleState by mutableStateOf(prefs.getFloat(KEY_HAPTIC_SCALE, 1f))
+    private var rumbleState by mutableStateOf(prefs.getBoolean(KEY_RUMBLE, true))
 
     var themeMode: ThemeMode
         get() = themeModeState
@@ -89,6 +90,14 @@ class AppPrefs(context: Context) {
         set(value) {
             hapticScaleState = value
             prefs.edit().putFloat(KEY_HAPTIC_SCALE, value).apply()
+        }
+
+    /** 接收 PC 回传的游戏震动（手柄马达输出）。 */
+    var rumbleEnabled: Boolean
+        get() = rumbleState
+        set(value) {
+            rumbleState = value
+            prefs.edit().putBoolean(KEY_RUMBLE, value).apply()
         }
 
     /** 退出前台时把输入归零并停发，回到前台再恢复。 */
@@ -136,6 +145,7 @@ class AppPrefs(context: Context) {
         const val KEY_ACCENT = "accentColor"
         const val KEY_HAPTIC = "hapticFeedback"
         const val KEY_HAPTIC_SCALE = "hapticScale"
+        const val KEY_RUMBLE = "rumbleEnabled"
         const val KEY_FREEZE = "freezeOnBackground"
         const val KEY_STATUS_BAR = "disableStatusBar"
         const val KEY_STATUS_BAR_APPLIED = "statusBarApplied"

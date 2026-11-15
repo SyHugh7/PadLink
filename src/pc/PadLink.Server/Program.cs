@@ -6,129 +6,164 @@ using PadLink.Core.Protocol;
 using PadLink.Server;
 using PadLink.Server.Backends;
 
-try { Console.OutputEncoding = System.Text.Encoding.UTF8; } catch (IOException) { /* 输出被重定向时忽略 */ }
-
-// --verify：自检虚拟手柄后端（创建手柄 → 提交状态 → XInput 回读比对），不启动网络服务。
-if (args.Contains("--verify"))
-    return SelfTest.Run();
-
-// --probe：只读 XInput，看系统里有没有人在发输入（用来验证完整链路）。
-if (args.Contains("--probe"))
-    return SelfTest.Probe(int.TryParse(OptionValue(args, "--seconds"), out var probeSeconds) ? probeSeconds : 5);
-
-var backendName = OptionValue(args, "--backend") ?? "vigem";
-var udpPort = int.TryParse(OptionValue(args, "--port"), out var parsedPort)
-    ? parsedPort
-    : ProtocolConstants.UdpPort;
-
-// 空闲回收阈值。默认 5 分钟；调试时可以调小（例如 --idle-seconds 3）来验证回收逻辑。
-var idleTimeout = double.TryParse(OptionValue(args, "--idle-seconds"), out var idleSeconds) && idleSeconds > 0
-    ? TimeSpan.FromSeconds(idleSeconds)
-    : ProtocolConstants.IdleSessionTimeout;
-
-// --controller：PC 端指定虚拟手柄的类型，盖过手机在帧里声明的那个。
-ControllerType? preferredController = null;
-if (OptionValue(args, "--controller") is { } controllerName)
+internal static class Program
 {
-    if (!ControllerTypeWire.TryParse(controllerName, out var parsedType))
+    private static int Main(string[] args)
     {
-        Console.WriteLine($"未知手柄类型「{controllerName}」，可选 xbox360 / ds4");
-        return 1;
+        try
+        {
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
+        }
+        catch (IOException)
+        {
+            // 输出被重定向时忽略
+        }
+
+        try
+        {
+            return Run(args);
+        }
+        catch (VirtualControllerException ex)
+        {
+            // 这类错误几乎都是环境问题（没装 ViGEmBus、驱动拒绝接入），
+            // 给一句能照着做的提示，而不是扔一坨未处理异常堆栈。
+            Console.WriteLine($"虚拟手柄后端不可用：{ex.Message}");
+            Console.WriteLine("没装 ViGEmBus 时，可先用 --backend console 只验证链路。");
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"启动失败：{ex.Message}");
+            Console.WriteLine(ex);
+            return 1;
+        }
     }
 
-    preferredController = parsedType;
-}
-
-IVirtualControllerBackend backend;
-try
-{
-    backend = backendName switch
+    private static int Run(string[] args)
     {
-        "vigem" => new ViGEmBackend(),
-        "console" => new ConsoleBackend(),
-        _ => throw new ArgumentException($"未知后端「{backendName}」，可选 vigem / console"),
-    };
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"后端 {backendName} 初始化失败：{ex.Message}");
-    if (backendName == "vigem")
-        Console.WriteLine("需要已安装 ViGEmBus 驱动；也可先用 --backend console 只验证链路。");
-    return 1;
-}
+        // --verify：自检虚拟手柄后端（创建手柄 → 提交状态 → XInput 回读比对），不启动网络服务。
+        if (args.Contains("--verify"))
+            return SelfTest.Run();
 
-PadLinkHost host;
-try
-{
-    host = new PadLinkHost(backend, udpPort, idleTimeout, ProtocolConstants.ControlPort, preferredController);
-}
-catch (SocketException ex)
-{
-    Console.WriteLine($"UDP 端口 {udpPort} 绑定失败：{ex.Message}");
-    Console.WriteLine("换一个端口：dotnet run --project PadLink.Server -- --port 12345");
-    backend.Dispose();
-    return 1;
-}
+        // --probe：只读 XInput，看系统里有没有人在发输入（用来验证完整链路）。
+        if (args.Contains("--probe"))
+            return SelfTest.Probe(int.TryParse(OptionValue(args, "--seconds"), out var probeSeconds) ? probeSeconds : 5);
 
-using (host)
-{
-    host.Start();
+        var backendName = OptionValue(args, "--backend") ?? "vigem";
+        var udpPort = int.TryParse(OptionValue(args, "--port"), out var parsedPort)
+            ? parsedPort
+            : ProtocolConstants.UdpPort;
 
-    // --adb：启动后顺手把隧道建起来，手机插着线就能直接连。
-    if (args.Contains("--adb"))
-    {
-        var (ok, message) = host.TryEstablishAdbTunnel();
-        Console.WriteLine(ok ? $"  ADB 隧道：{message}" : $"  ADB 隧道失败：{message}");
+        // 空闲回收阈值。默认 5 分钟；调试时可以调小（例如 --idle-seconds 3）来验证回收逻辑。
+        var idleTimeout = double.TryParse(OptionValue(args, "--idle-seconds"), out var idleSeconds) && idleSeconds > 0
+            ? TimeSpan.FromSeconds(idleSeconds)
+            : ProtocolConstants.IdleSessionTimeout;
+
+        // --controller：PC 端指定虚拟手柄的类型，盖过手机在帧里声明的那个。
+        ControllerType? preferredController = null;
+        if (OptionValue(args, "--controller") is { } controllerName)
+        {
+            if (!ControllerTypeWire.TryParse(controllerName, out var parsedType))
+            {
+                Console.WriteLine($"未知手柄类型「{controllerName}」，可选 xbox360 / ds4");
+                return 1;
+            }
+
+            preferredController = parsedType;
+        }
+
+        IVirtualControllerBackend backend;
+        try
+        {
+            backend = backendName switch
+            {
+                "vigem" => new ViGEmBackend(),
+                "console" => new ConsoleBackend(),
+                _ => throw new ArgumentException($"未知后端「{backendName}」，可选 vigem / console"),
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"后端 {backendName} 初始化失败：{ex.Message}");
+            if (backendName == "vigem")
+                Console.WriteLine("需要已安装 ViGEmBus 驱动；也可先用 --backend console 只验证链路。");
+            return 1;
+        }
+
+        PadLinkHost host;
+        try
+        {
+            host = new PadLinkHost(backend, udpPort, idleTimeout, ProtocolConstants.ControlPort, preferredController);
+        }
+        catch (SocketException ex)
+        {
+            Console.WriteLine($"UDP 端口 {udpPort} 绑定失败：{ex.Message}");
+            Console.WriteLine("换一个端口：dotnet run --project PadLink.Server -- --port 12345");
+            backend.Dispose();
+            return 1;
+        }
+
+        using (host)
+        {
+            host.Start();
+
+            // --adb：启动后顺手把隧道建起来，手机插着线就能直接连。
+            if (args.Contains("--adb"))
+            {
+                var (ok, message) = host.TryEstablishAdbTunnel();
+                Console.WriteLine(ok ? $"  ADB 隧道：{message}" : $"  ADB 隧道失败：{message}");
+            }
+
+            foreach (var address in LocalAddresses())
+                Console.WriteLine($"  本机地址 {address}:{udpPort}");
+            Console.WriteLine("等待数据帧…（Ctrl+C 退出）");
+
+            using var cts = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, e) =>
+            {
+                e.Cancel = true;
+                cts.Cancel();
+            };
+
+            // --exit-after：N 秒后正常退出。给自动化测试用，顺便能验证退出时的清理路径（拆隧道、毁手柄）。
+            if (int.TryParse(OptionValue(args, "--exit-after"), out var exitAfterSeconds) && exitAfterSeconds > 0)
+            {
+                Console.WriteLine($"将在 {exitAfterSeconds} 秒后正常退出。");
+                cts.CancelAfter(TimeSpan.FromSeconds(exitAfterSeconds));
+            }
+
+            try
+            {
+                Task.Delay(Timeout.Infinite, cts.Token).GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException)
+            {
+                // Ctrl+C
+            }
+
+            foreach (var session in host.Sessions)
+            {
+                var total = session.FramesReceived + session.FramesLost;
+                var loss = total == 0 ? 0 : 100.0 * session.FramesLost / total;
+                Console.WriteLine(
+                    $"{session.Remote}  收到 {session.FramesReceived} 帧，丢 {session.FramesLost} 帧（{loss:F2}%）");
+            }
+
+            Console.WriteLine("正在停止…");
+        }
+
+        Console.WriteLine("已退出。");
+        return 0;
     }
 
-    foreach (var address in LocalAddresses())
-        Console.WriteLine($"  本机地址 {address}:{udpPort}");
-    Console.WriteLine("等待数据帧…（Ctrl+C 退出）");
-
-    using var cts = new CancellationTokenSource();
-    Console.CancelKeyPress += (_, e) =>
+    private static string? OptionValue(string[] args, string name)
     {
-        e.Cancel = true;
-        cts.Cancel();
-    };
-
-    // --exit-after：N 秒后正常退出。给自动化测试用，顺便能验证退出时的清理路径（拆隧道、毁手柄）。
-    if (int.TryParse(OptionValue(args, "--exit-after"), out var exitAfterSeconds) && exitAfterSeconds > 0)
-    {
-        Console.WriteLine($"将在 {exitAfterSeconds} 秒后正常退出。");
-        cts.CancelAfter(TimeSpan.FromSeconds(exitAfterSeconds));
+        var index = Array.IndexOf(args, name);
+        return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
     }
 
-    try
-    {
-        await Task.Delay(Timeout.Infinite, cts.Token);
-    }
-    catch (OperationCanceledException)
-    {
-        // Ctrl+C
-    }
-
-    foreach (var session in host.Sessions)
-    {
-        var total = session.FramesReceived + session.FramesLost;
-        var loss = total == 0 ? 0 : 100.0 * session.FramesLost / total;
-        Console.WriteLine(
-            $"{session.Remote}  收到 {session.FramesReceived} 帧，丢 {session.FramesLost} 帧（{loss:F2}%）");
-    }
-
-    Console.WriteLine("正在停止…");
+    private static IEnumerable<IPAddress> LocalAddresses()
+        => Dns.GetHostAddresses(Dns.GetHostName())
+            .Where(a => a.AddressFamily == AddressFamily.InterNetwork)
+            .Distinct();
 }
-
-Console.WriteLine("已退出。");
-return 0;
-
-static string? OptionValue(string[] args, string name)
-{
-    var index = Array.IndexOf(args, name);
-    return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
-}
-
-static IEnumerable<IPAddress> LocalAddresses()
-    => Dns.GetHostAddresses(Dns.GetHostName())
-        .Where(a => a.AddressFamily == AddressFamily.InterNetwork)
-        .Distinct();

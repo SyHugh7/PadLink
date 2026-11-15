@@ -109,6 +109,11 @@ class PadLinkController(
             attempt
                 .onSuccess { created ->
                     pump = created
+                    // 断线由传输层（读线程 EOF、心跳超时）或发送循环通知，不再等下一次
+                    // 手动操作才发现。界面状态因此是即时更新的。
+                    created.onLost = { reason -> onTransportLost(created, reason) }
+                    created.transport.onLost = { reason -> onTransportLost(created, reason) }
+                    created.transport.onRumble = { left, right -> onRumble?.invoke(left, right) }
                     status = LinkStatus.Connected(created.describe)
                     statsJob = scope.launch { created.stats.collect { stats = it } }
                 }
@@ -155,6 +160,9 @@ class PadLinkController(
     /** 反馈交给界面层，时长由调用方给：普通按键/摇杆 30ms，滑块边界与八向切换 10ms。 */
     var onHaptic: ((Long) -> Unit)? = null
 
+    /** PC 回传的游戏震动。参数是左/右马达强度（0..255）。 */
+    var onRumble: ((Int, Int) -> Unit)? = null
+
     /** 控件自身的按下/切换反馈。 */
     fun haptic(durationMs: Long = 30L) {
         onHaptic?.invoke(durationMs)
@@ -175,6 +183,41 @@ class PadLinkController(
     fun freezeInput() {
         input.reset()
         push()
+    }
+
+    /**
+     * 进入后台：停传感器，并把重力刚写进去的左摇杆 X 归零。
+     *
+     * 只调 [freezeInput] 不够——传感器还在跑，下一帧回调又会把倾角写回
+     * [PadInputState.leftX]，于是后台继续发着倾斜的输入。这里先停源，再清掉它
+     * 最后留下的那个值。**不动开关状态**：回前台还要接着用。
+     */
+    fun onBackground() {
+        if (!tiltEnabled) return
+        tilt.stop()
+        input.leftX = 0f
+        push()
+    }
+
+    /** 回到前台：重力开着就接着读。零点沿用上次存的，不重新定。 */
+    fun onForeground() {
+        if (tiltEnabled) tilt.start(tiltStore.loadZeroRad())
+    }
+
+    /**
+     * 传输断了。清空本地输入（协议 §7：避免重连后残留按下状态），把错误推到界面，
+     * ADB 模式自动重连。
+     */
+    private fun onTransportLost(source: FramePump, reason: String) {
+        scope.launch {
+            if (pump !== source) return@launch     // 旧连接迟到的回调
+
+            disconnect()
+            input.reset()
+            push()
+            status = LinkStatus.Failed(reason)
+            if (mode == TransportMode.ADB) scheduleAdbRetry()
+        }
     }
 
     /**

@@ -45,7 +45,7 @@ build.ps1               编译 PC 端并发布
 
 ## 下载
 
-[**Releases**](https://github.com/huangsiyu921-cmd/PadLink/releases) 里有预编译包：
+[**Releases**](https://github.com/SyHugh7/PadLink/releases) 里有预编译包：
 
 | 文件 | 说明 |
 | --- | --- |
@@ -140,9 +140,9 @@ cd src\android; .\gradlew.bat :core:test           # Kotlin 端必须绿
 
 ## 状态
 
-已经能用的都真机验证过：ADB 全链路、手柄类型切换、PC 界面、手机界面、布局系统、重力转向、协议互验。
+已经能用的都真机验证过：ADB 全链路、手柄类型切换、PC 界面、手机界面、布局系统、重力转向、震动回传（ADB 通道）、协议互验。
 
-还没做：WiFi 模式的真机验证、震动回传（协议帧已定义，两端都没实现）、`adb pair` 无线调试引导、主题动态取色。重力转向目前只绑左摇杆的 X 轴，扳机 / 按键那种「过阈值当按下」的目标还没定怎么绑。
+还没做：WiFi 模式的真机验证（震动回传的 UDP 反向通道代码已写，但没在 WiFi 下真机验证）、`adb pair` 无线调试引导、主题动态取色。重力转向目前只绑左摇杆的 X 轴，扳机 / 按键那种「过阈值当按下」的目标还没定怎么绑。
 
 ## 文档
 

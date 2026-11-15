@@ -4,9 +4,9 @@ import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.padlink.app.dhizuku.DhizukuStatusBar
 import com.padlink.app.input.TiltSource
 import com.padlink.app.input.TiltStore
-import com.padlink.app.dhizuku.DhizukuStatusBar
 import com.padlink.app.layout.LayoutStore
 import com.padlink.app.layout.PadLayout
 import com.padlink.app.pref.AppPrefs
@@ -56,8 +56,17 @@ class PadLinkApplication : Application() {
         statusBar.prepare()
     }
 
-    fun updateLayout(next: PadLayout) {
+    /**
+     * 更新布局。[persist] = false 只改内存 —— 拖动时每帧都写盘会发涩，
+     * 手势结束或界面离开时再调 [flushLayout] 落一次。
+     */
+    fun updateLayout(next: PadLayout, persist: Boolean = true) {
         layout = next
-        layoutStore.save(next)
+        if (persist) layoutStore.save(next)
+    }
+
+    /** 把当前布局落盘。拖动结束、Activity 切后台时调。 */
+    fun flushLayout() {
+        layoutStore.save(layout)
     }
 }

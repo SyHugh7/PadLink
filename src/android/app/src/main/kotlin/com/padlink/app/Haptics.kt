@@ -11,7 +11,7 @@ import com.padlink.app.pref.AppPrefs
 import kotlin.math.roundToLong
 
 /**
- * 按键反馈震动。
+ * 马达输出：按键反馈 + 游戏回传震动。
  *
  * 直接驱动马达，不走 Compose 的 `LocalHapticFeedback`（那套最终是
  * `View.performHapticFeedback()`，既需要 VIBRATE 权限，又会被系统「触感反馈」开关掐掉）。
@@ -36,11 +36,41 @@ class Haptics(context: Context, private val prefs: AppPrefs) {
         val motor = vibrator ?: return
         if (!motor.hasVibrator()) return
 
+        val duration = (durationMs * prefs.hapticScale)
+            .roundToLong()
+            .coerceIn(1L, MAX_DURATION_MS)
+        vibrate(VibrationEffect.createOneShot(duration, AMPLITUDE))
+    }
+
+    /**
+     * 游戏回传的震动。手机只有一个马达，取左右里较大的那个。
+     *
+     * 用 1 秒的一次性震动而不是几十毫秒的短震：游戏可能只在碰撞那一刻发一次强度，
+     * 下一次更新会直接替换当前效果；强度为 0 则立即停。
+     */
+    fun rumble(left: Int, right: Int) {
+        val motor = vibrator ?: return
+        if (!motor.hasVibrator()) return
+
+        val level = maxOf(left, right).coerceIn(0, 255)
+        if (level == 0) {
+            runCatching { motor.cancel() }
+            return
+        }
+
+        val amplitude = if (motor.hasAmplitudeControl()) level.coerceAtLeast(1) else 255
+
+        // 用 one-shot 而不是 waveform：这台机器的 VibratorManager 会把重复的
+        // waveform 请求记成 ignored_for_ongoing，one-shot 与按键反馈走同一条路，稳定。
+        // 游戏持续震动时，下一次回调会替换当前效果。
+        vibrate(VibrationEffect.createOneShot(RUMBLE_PULSE_MS, amplitude))
+    }
+
+    private fun vibrate(effect: VibrationEffect) {
+        val motor = vibrator ?: return
+        if (!motor.hasVibrator()) return
+
         runCatching {
-            val duration = (durationMs * prefs.hapticScale)
-                .roundToLong()
-                .coerceIn(1L, MAX_DURATION_MS)
-            val effect = VibrationEffect.createOneShot(duration, AMPLITUDE)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 val attributes = VibrationAttributes.Builder()
                     .setUsage(VibrationAttributes.USAGE_HARDWARE_FEEDBACK)
@@ -58,5 +88,8 @@ class Haptics(context: Context, private val prefs: AppPrefs) {
         const val DEFAULT_DURATION_MS = DURATION_MS
         const val MAX_DURATION_MS = 200L
         const val AMPLITUDE = 160
+
+        /** 一次回传震动最长持续多久；下一次回传会把它换掉。 */
+        const val RUMBLE_PULSE_MS = 1000L
     }
 }

@@ -10,7 +10,22 @@ namespace PadLink.Backends.ViGEm;
 /// </summary>
 public sealed class ViGEmBackend : IVirtualControllerBackend
 {
-    private readonly ViGEmClient _client = new();
+    private readonly ViGEmClient _client;
+
+    public ViGEmBackend()
+    {
+        try
+        {
+            _client = new ViGEmClient();
+        }
+        catch (Exception ex)
+        {
+            // 缺驱动是用户环境问题，不是程序 bug。给一句能照着做的提示，
+            // 别把 "Unable to load DLL" 这种原始异常直接甩到界面上。
+            throw new VirtualControllerException(
+                "ViGEmBus 驱动不可用：请先安装 ViGEmBus（管理员运行安装包）后重启 PadLink。", ex);
+        }
+    }
 
     public string Name => "vigem";
 

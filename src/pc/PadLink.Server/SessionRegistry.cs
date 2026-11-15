@@ -73,6 +73,53 @@ public sealed class SessionRegistry(
         }
     }
 
+    /// <summary>
+    /// 控制通道收到心跳：按来源地址找到会话，标记它还活着。
+    /// <para>连接是 ADB 模式的（TCP 一条连接 = 一个会话），地址能唯一对上。</para>
+    /// </summary>
+    public void NoteAlive(IPEndPoint remote)
+    {
+        lock (_gate)
+        {
+            foreach (var session in _sessions.Values)
+            {
+                if (session.Remote.Equals(remote)) session.NoteAlive();
+            }
+        }
+    }
+
+    /// <summary>
+    /// TCP 连接关闭：立刻回收这条连接对应的会话。
+    /// <para>
+    /// ADB 模式下"连接还在"就是"手机还连着"；连接没了就是真拔了，
+    /// 不该再让用户对着一个已经消失的虚拟手柄等五分钟。
+    /// </para>
+    /// </summary>
+    public int RemoveByRemote(IPEndPoint remote)
+    {
+        byte? player = null;
+        PadSession? victim = null;
+
+        lock (_gate)
+        {
+            foreach (var pair in _sessions)
+            {
+                if (!pair.Value.Remote.Equals(remote)) continue;
+                player = pair.Key;
+                victim = pair.Value;
+                break;
+            }
+
+            if (player is { } key) _sessions.Remove(key);
+        }
+
+        if (player is null || victim is null) return 0;
+
+        Console.WriteLine($"  会话断开 P{player}（{remote}），销毁虚拟手柄");
+        victim.Dispose();
+        return 1;
+    }
+
     public void PollFailSafe()
     {
         // 快照之后再提交，别让驱动回调/UI 的耗时占着锁。
@@ -98,7 +145,7 @@ public sealed class SessionRegistry(
         {
             foreach (var pair in _sessions)
             {
-                if (pair.Value.IdleFor > idle) victims.Add((pair.Key, pair.Value));
+                if (pair.Value.SilentFor > idle) victims.Add((pair.Key, pair.Value));
             }
 
             foreach (var (player, _) in victims) _sessions.Remove(player);
@@ -107,7 +154,7 @@ public sealed class SessionRegistry(
         foreach (var (player, session) in victims)
         {
             Console.WriteLine(
-                $"  回收空闲会话 P{player}（{session.IdleFor.TotalSeconds:F0}s 无数据），销毁虚拟手柄");
+                $"  回收空闲会话 P{player}（{session.SilentFor.TotalSeconds:F0}s 无数据也无心跳），销毁虚拟手柄");
             session.Dispose();
         }
 

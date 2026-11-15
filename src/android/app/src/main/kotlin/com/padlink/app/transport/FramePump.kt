@@ -40,6 +40,9 @@ class FramePump(
 
     val describe: String get() = transport.describe
 
+    /** 发送循环因连接坏掉而退出时回调一次。可能在 IO 线程调用。 */
+    var onLost: ((String) -> Unit)? = null
+
     val isRunning: Boolean get() = job?.isActive == true
 
     fun start() {
@@ -85,10 +88,9 @@ class FramePump(
             throw e
         } catch (e: Exception) {
             // 传输坏了（拔线、PC 关掉），把错误交给界面显示。
-            _stats.value = PumpStats(
-                framesSent = sent,
-                lastError = e.message ?: e.javaClass.simpleName,
-            )
+            val message = e.message ?: e.javaClass.simpleName
+            _stats.value = PumpStats(framesSent = sent, lastError = message)
+            onLost?.invoke(message)
         }
     }
 }

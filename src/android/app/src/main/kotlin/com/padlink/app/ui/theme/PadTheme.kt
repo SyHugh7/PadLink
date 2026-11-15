@@ -17,17 +17,15 @@ import androidx.compose.ui.platform.LocalContext
 import com.padlink.app.pref.AccentColor
 import com.padlink.app.pref.AppPrefs
 import com.padlink.app.pref.ThemeMode
-import kotlin.math.abs
 
 /**
- * 应用主题。
+ * PadLink 主题。
  *
- * 深色是主调（手柄界面多在暗处用），亮色留给白天窗边。
+ * 严格按 Material 3 的配色规范：种子色先展开成 primary / secondary / tertiary /
+ * neutral / neutralVariant 五组色调板，再按官方槽位表取 tone。
+ * 所有界面颜色都从 [MaterialTheme.colorScheme] 取，不在组件里写死色值。
  *
- * 主题色不是只换一个 `primary` —— 那样开关、chip、选中态仍会留着 Material 默认紫。
- * 这里从种子色派生整套 accent 槽位（primary / secondary / tertiary 及各自 container），
- * 所有 M3 组件和自绘控件都从同一份 [ColorScheme] 取色；Android 12+ 的动态取色直接用
- * 壁纸生成的整套方案，因此和预设色走的是同一条链路。
+ * Android 12+ 且用户选择「动态」时，直接用壁纸生成的那套方案。
  */
 @Composable
 fun PadLinkTheme(prefs: AppPrefs, content: @Composable () -> Unit) {
@@ -43,97 +41,118 @@ fun PadLinkTheme(prefs: AppPrefs, content: @Composable () -> Unit) {
 
     val scheme = when {
         dynamic -> if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        else -> accentScheme(prefs.accentColor.seedColor(), dark)
+        else -> materialScheme(prefs.accentColor.seedColor(), dark)
     }
 
+    // 主页的自绘手柄控件在 Canvas 里读不到 MaterialTheme，仍从这份调色板取色。
     CompositionLocalProvider(LocalPadPalette provides padPalette(scheme)) {
         MaterialTheme(colorScheme = scheme, content = content)
     }
 }
 
 /**
- * 由种子色派生完整的 Material3 配色。
+ * 种子色 → 完整 M3 配色。
  *
- * 只替换带“颜色”的槽位；surface / background 仍用 M3 基线的中性色 —— 手柄界面要的是
- * 安静的底，不是一张彩色卡片。
+ * 彩度上限来自 M3 基线：primary 最艳，secondary 同色相但明显收敛，
+ * tertiary 换到 +60° 色相，neutral / neutralVariant 只带一点点色相。
  */
-private fun accentScheme(seed: Color, dark: Boolean): ColorScheme {
-    val (hue, saturation, _) = seed.toHsl()
-    val s = saturation.coerceIn(0.12f, 0.9f)
+internal fun materialScheme(seed: Color, dark: Boolean): ColorScheme {
+    val (hue, seedChroma) = seed.hueChroma()
 
-    // 深色下主题色要够亮才能在暗底上看见，亮色下则相反。
-    val primary = hsl(hue, s * 0.85f, if (dark) 0.70f else 0.42f)
-    val onPrimary = hsl(hue, s * 0.35f, if (dark) 0.14f else 0.99f)
+    val primary = TonalPalette(hue, seedChroma.coerceIn(36f, 64f))
+    val secondary = TonalPalette(hue, (seedChroma * 0.45f).coerceIn(14f, 20f))
+    val tertiary = TonalPalette(hue + 60f, (seedChroma * 0.60f).coerceIn(20f, 32f))
+    val neutral = TonalPalette(hue, 4f)
+    val neutralVariant = TonalPalette(hue, 8f)
+    val error = TonalPalette(25f, 60f)
 
-    val primaryContainer = hsl(hue, s * 0.45f, if (dark) 0.28f else 0.88f)
-    val onPrimaryContainer = hsl(hue, s * 0.50f, if (dark) 0.92f else 0.18f)
-
-    // secondary 保持同色相、明显更低饱和；tertiary 换个相邻色相，避免界面只有一个颜色。
-    val secondary = hsl(hue, s * 0.28f, if (dark) 0.74f else 0.40f)
-    val onSecondary = hsl(hue, s * 0.20f, if (dark) 0.16f else 0.99f)
-    val secondaryContainer = hsl(hue, s * 0.20f, if (dark) 0.30f else 0.90f)
-    val onSecondaryContainer = hsl(hue, s * 0.28f, if (dark) 0.92f else 0.18f)
-
-    val tertiaryHue = hue + 55f
-    val tertiary = hsl(tertiaryHue, s * 0.32f, if (dark) 0.76f else 0.42f)
-    val onTertiary = hsl(tertiaryHue, s * 0.22f, if (dark) 0.16f else 0.99f)
-    val tertiaryContainer = hsl(tertiaryHue, s * 0.24f, if (dark) 0.30f else 0.90f)
-    val onTertiaryContainer = hsl(tertiaryHue, s * 0.30f, if (dark) 0.92f else 0.18f)
-
-    val base = if (dark) darkColorScheme() else lightColorScheme()
-
-    // 背景也跟着主题色走：只留一点点色相（6%–10% 饱和），
-    // 否则「蓝/紫/绿/橙/粉」五个预设会共用同一套灰色底，看起来像没生效。
-    fun surface(lightness: Float, saturation: Float = if (dark) 0.065f else 0.080f) =
-        hsl(hue, saturation, lightness)
-
-    val onSurface = if (dark) hsl(hue, 0.030f, 0.930f) else hsl(hue, 0.100f, 0.120f)
-    val onSurfaceVariant = if (dark) hsl(hue, 0.040f, 0.780f) else hsl(hue, 0.060f, 0.340f)
-    val outline = if (dark) hsl(hue, 0.050f, 0.580f) else hsl(hue, 0.060f, 0.500f)
-    val outlineVariant = if (dark) hsl(hue, 0.050f, 0.320f) else hsl(hue, 0.100f, 0.780f)
-    val inverseSurface = if (dark) hsl(hue, 0.030f, 0.920f) else hsl(hue, 0.080f, 0.200f)
-    val inverseOnSurface = if (dark) hsl(hue, 0.040f, 0.120f) else hsl(hue, 0.050f, 0.940f)
-
-    return base.copy(
-        primary = primary,
-        onPrimary = onPrimary,
-        primaryContainer = primaryContainer,
-        onPrimaryContainer = onPrimaryContainer,
-        inversePrimary = hsl(hue, s * 0.85f, if (dark) 0.42f else 0.72f),
-        secondary = secondary,
-        onSecondary = onSecondary,
-        secondaryContainer = secondaryContainer,
-        onSecondaryContainer = onSecondaryContainer,
-        tertiary = tertiary,
-        onTertiary = onTertiary,
-        tertiaryContainer = tertiaryContainer,
-        onTertiaryContainer = onTertiaryContainer,
-        surfaceTint = primary,
-        background = if (dark) surface(0.055f) else surface(0.985f),
-        onBackground = onSurface,
-        surface = if (dark) surface(0.060f) else surface(0.980f),
-        onSurface = onSurface,
-        surfaceVariant = if (dark) surface(0.200f) else surface(0.900f),
-        onSurfaceVariant = onSurfaceVariant,
-        inverseSurface = inverseSurface,
-        inverseOnSurface = inverseOnSurface,
-        outline = outline,
-        outlineVariant = outlineVariant,
-        surfaceBright = if (dark) surface(0.260f, 0.055f) else surface(0.995f),
-        surfaceDim = if (dark) surface(0.100f) else surface(0.870f, 0.070f),
-        surfaceContainerLowest = if (dark) surface(0.035f) else surface(1.0f),
-        surfaceContainerLow = if (dark) surface(0.075f) else surface(0.965f),
-        surfaceContainer = if (dark) surface(0.100f) else surface(0.945f),
-        surfaceContainerHigh = if (dark) surface(0.130f, 0.060f) else surface(0.925f),
-        surfaceContainerHighest = if (dark) surface(0.170f, 0.055f) else surface(0.900f),
-    )
+    return if (dark) {
+        darkColorScheme(
+            primary = primary.tone(80f),
+            onPrimary = primary.tone(20f),
+            primaryContainer = primary.tone(30f),
+            onPrimaryContainer = primary.tone(90f),
+            inversePrimary = primary.tone(40f),
+            secondary = secondary.tone(80f),
+            onSecondary = secondary.tone(20f),
+            secondaryContainer = secondary.tone(30f),
+            onSecondaryContainer = secondary.tone(90f),
+            tertiary = tertiary.tone(80f),
+            onTertiary = tertiary.tone(20f),
+            tertiaryContainer = tertiary.tone(30f),
+            onTertiaryContainer = tertiary.tone(90f),
+            background = neutral.tone(6f),
+            onBackground = neutral.tone(90f),
+            surface = neutral.tone(6f),
+            onSurface = neutral.tone(90f),
+            surfaceVariant = neutralVariant.tone(30f),
+            onSurfaceVariant = neutralVariant.tone(80f),
+            surfaceTint = primary.tone(80f),
+            inverseSurface = neutral.tone(90f),
+            inverseOnSurface = neutral.tone(20f),
+            error = error.tone(80f),
+            onError = error.tone(20f),
+            errorContainer = error.tone(30f),
+            onErrorContainer = error.tone(90f),
+            outline = neutralVariant.tone(60f),
+            outlineVariant = neutralVariant.tone(30f),
+            scrim = neutral.tone(0f),
+            surfaceBright = neutral.tone(24f),
+            surfaceDim = neutral.tone(6f),
+            surfaceContainerLowest = neutral.tone(4f),
+            surfaceContainerLow = neutral.tone(10f),
+            surfaceContainer = neutral.tone(12f),
+            surfaceContainerHigh = neutral.tone(17f),
+            surfaceContainerHighest = neutral.tone(22f),
+        )
+    } else {
+        lightColorScheme(
+            primary = primary.tone(40f),
+            onPrimary = primary.tone(100f),
+            primaryContainer = primary.tone(90f),
+            onPrimaryContainer = primary.tone(10f),
+            inversePrimary = primary.tone(80f),
+            secondary = secondary.tone(40f),
+            onSecondary = secondary.tone(100f),
+            secondaryContainer = secondary.tone(90f),
+            onSecondaryContainer = secondary.tone(10f),
+            tertiary = tertiary.tone(40f),
+            onTertiary = tertiary.tone(100f),
+            tertiaryContainer = tertiary.tone(90f),
+            onTertiaryContainer = tertiary.tone(10f),
+            background = neutral.tone(98f),
+            onBackground = neutral.tone(10f),
+            surface = neutral.tone(98f),
+            onSurface = neutral.tone(10f),
+            surfaceVariant = neutralVariant.tone(90f),
+            onSurfaceVariant = neutralVariant.tone(30f),
+            surfaceTint = primary.tone(40f),
+            inverseSurface = neutral.tone(20f),
+            inverseOnSurface = neutral.tone(95f),
+            error = error.tone(40f),
+            onError = error.tone(100f),
+            errorContainer = error.tone(90f),
+            onErrorContainer = error.tone(10f),
+            outline = neutralVariant.tone(50f),
+            outlineVariant = neutralVariant.tone(80f),
+            scrim = neutral.tone(0f),
+            surfaceBright = neutral.tone(98f),
+            surfaceDim = neutral.tone(87f),
+            surfaceContainerLowest = neutral.tone(100f),
+            surfaceContainerLow = neutral.tone(96f),
+            surfaceContainer = neutral.tone(94f),
+            surfaceContainerHigh = neutral.tone(92f),
+            surfaceContainerHighest = neutral.tone(90f),
+        )
+    }
 }
 
 /**
- * 自绘手柄控件的配色。全部从 [ColorScheme] 派生，深浅色主题自动跟着走。
+ * 自绘手柄控件的配色。
  *
- * 单独抽出来是因为 Canvas 的 draw lambda 不是 @Composable，不能在里面读 MaterialTheme；
- * 在组合阶段取一次，再带进绘制阶段。
+ * Canvas 的 draw lambda 不是 @Composable，读不到 MaterialTheme，所以在组合阶段
+ * 从 [ColorScheme] 派生一份。语义跟随 M3：静止是 surface 容器色 + onSurface，
+ * 按下是 primary + onPrimary。
  */
 @Immutable
 data class PadPalette(
@@ -185,7 +204,7 @@ private fun padPalette(scheme: ColorScheme): PadPalette = PadPalette(
     stickKnobPressed = scheme.primary,
     dpadArc = scheme.primary.copy(alpha = 0.60f),
     dpadWell = scheme.surfaceContainerLow,
-    dpadArm = scheme.onSurface.copy(alpha = 0.16f),
+    dpadArm = scheme.onSurface.copy(alpha = 0.20f),
     dpadCenter = scheme.onSurfaceVariant.copy(alpha = 0.55f),
     dpadCenterPressed = scheme.primary,
     triggerTrack = scheme.surfaceContainerHighest,
@@ -207,53 +226,15 @@ private fun padPalette(scheme: ColorScheme): PadPalette = PadPalette(
     onAccent = scheme.onPrimary,
 )
 
-/**
- * 预设主题色的种子值。都压过饱和度 —— 原来的高饱和色在暗底上太刺眼，也容易和手柄
- * 按下的高亮抢注意力。动态取色不走这里。
- */
+/** 预设主题色的种子值。动态取色不走这里。 */
 private fun AccentColor.seedColor(): Color = when (this) {
-    AccentColor.BLUE, AccentColor.DYNAMIC -> Color(0xFF6E9BD6)
-    AccentColor.PURPLE -> Color(0xFFA996C9)
-    AccentColor.GREEN -> Color(0xFF8FB79B)
-    AccentColor.ORANGE -> Color(0xFFCBAA80)
-    AccentColor.PINK -> Color(0xFFC79AA9)
+    AccentColor.BLUE, AccentColor.DYNAMIC -> Color(0xFF0061A4)
+    AccentColor.PURPLE -> Color(0xFF6750A4)
+    AccentColor.GREEN -> Color(0xFF386A20)
+    AccentColor.ORANGE -> Color(0xFF8B5000)
+    AccentColor.PINK -> Color(0xFFA03E78)
 }
 
-private fun Color.toHsl(): Triple<Float, Float, Float> {
-    val r = red
-    val g = green
-    val b = blue
-    val max = maxOf(r, g, b)
-    val min = minOf(r, g, b)
-    val l = (max + min) / 2f
-    val d = max - min
-    if (d == 0f) return Triple(0f, 0f, l)
-
-    val s = d / (1f - abs(2f * l - 1f))
-    val h = when (max) {
-        r -> 60f * (((g - b) / d + 6f) % 6f)
-        g -> 60f * ((b - r) / d + 2f)
-        else -> 60f * ((r - g) / d + 4f)
-    }
-    return Triple(h, s, l)
-}
-
-private fun hsl(hue: Float, saturation: Float, lightness: Float): Color {
-    val h = ((hue % 360f) + 360f) % 360f
-    val s = saturation.coerceIn(0f, 1f)
-    val l = lightness.coerceIn(0f, 1f)
-
-    val c = (1f - abs(2f * l - 1f)) * s
-    val x = c * (1f - abs((h / 60f) % 2f - 1f))
-    val m = l - c / 2f
-
-    val (r, g, b) = when ((h / 60f).toInt() % 6) {
-        0 -> Triple(c, x, 0f)
-        1 -> Triple(x, c, 0f)
-        2 -> Triple(0f, c, x)
-        3 -> Triple(0f, x, c)
-        4 -> Triple(x, 0f, c)
-        else -> Triple(c, 0f, x)
-    }
-    return Color(r + m, g + m, b + m)
-}
+/** 设置页主题色圆点用的实际 primary。动态取色没有静态值，由调用方另处理。 */
+fun AccentColor.previewPrimary(dark: Boolean): Color =
+    materialScheme(seedColor(), dark).primary

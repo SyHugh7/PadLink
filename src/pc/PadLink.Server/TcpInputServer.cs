@@ -66,9 +66,16 @@ public sealed class TcpInputServer : IDisposable
 
         Console.WriteLine($"  TCP 连接建立 ← {remote}");
 
+        var stream = client.GetStream();
+        var writeLock = new SemaphoreSlim(1, 1);
+        using var pingCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var pingTask = PingLoopAsync(stream, writeLock, pingCts.Token);
+
+        // 震动回调是同步的，写入是异步的：fire-and-forget，丢一帧震动不影响输入。
+        var rumbleSink = new Action<RumbleFrame>(frame => _ = SendRumbleAsync(stream, writeLock, frame));
+
         try
         {
-            var stream = client.GetStream();
             var buffer = new byte[8192];
             var mode = ParseMode.Idle;
             var frameBuffer = new byte[ProtocolConstants.FrameSize];
@@ -104,7 +111,7 @@ public sealed class TcpInputServer : IDisposable
                             frameBuffer[frameFilled++] = b;
                             if (frameFilled == ProtocolConstants.FrameSize)
                             {
-                                HandleFrame(frameBuffer, remote);
+                                HandleFrame(frameBuffer, remote, rumbleSink);
                                 mode = ParseMode.Idle;
                                 frameFilled = 0;
                             }
@@ -112,9 +119,9 @@ public sealed class TcpInputServer : IDisposable
                             break;
 
                         case ParseMode.Json:
-                            if (b == (byte)'\n')
+                            if (b == 10)
                             {
-                                await HandleControlAsync(stream, line.ToString(), token);
+                                await HandleControlAsync(stream, line.ToString(), remote, writeLock, token);
                                 mode = ParseMode.Idle;
                             }
                             else
@@ -137,12 +144,59 @@ public sealed class TcpInputServer : IDisposable
         }
         finally
         {
+            pingCts.Cancel();
+            try
+            {
+                await pingTask;
+            }
+            catch (OperationCanceledException)
+            {
+                // 正常停止
+            }
+
             client.Dispose();
+
+            // 连接没了就是手机拔了。ADB 模式下一条连接就是一个会话，
+            // 不必再让用户对着已消失的虚拟手柄等五分钟的空闲回收。
+            _registry.RemoveByRemote(remote);
+
             Console.WriteLine($"  TCP 连接关闭 × {remote}");
         }
     }
 
-    private void HandleFrame(byte[] bytes, IPEndPoint remote)
+    /// <summary>
+    /// 控制通道心跳。协议 §7 要求手机端一段时间收不到反向消息就判定断开；
+    /// 这里每秒发一次，既保活，也能让"TCP 还是开着的，但对面已经没了"的半开连接暴露出来。
+    /// </summary>
+    private static async Task PingLoopAsync(
+        NetworkStream stream, SemaphoreSlim writeLock, CancellationToken token)
+    {
+        try
+        {
+            // 握手是 hello → welcome → start → started：先让出两秒，别把 ping 插进握手。
+            await Task.Delay(TimeSpan.FromSeconds(2), token);
+
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                await SendLineAsync(
+                    stream,
+                    new { v = ProtocolConstants.Version, type = "ping" },
+                    writeLock,
+                    token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 正常停止
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+        {
+            // 连接坏了，读循环会收尾。
+        }
+    }
+
+    private void HandleFrame(byte[] bytes, IPEndPoint remote, Action<RumbleFrame> rumbleSink)
     {
         if (!InputFrame.TryDecode(bytes, out var frame, out var error))
         {
@@ -152,7 +206,9 @@ public sealed class TcpInputServer : IDisposable
 
         try
         {
-            _registry.GetOrCreate(remote, frame).OnFrame(frame);
+            var session = _registry.GetOrCreate(remote, frame);
+            session.SetRumbleSink(rumbleSink);
+            session.OnFrame(frame);
         }
         catch (Exception ex)
         {
@@ -160,8 +216,37 @@ public sealed class TcpInputServer : IDisposable
         }
     }
 
-    /// <summary>控制通道的 JSON 消息（协议 §4）。当前只做最小握手，认证留到后面。</summary>
-    private static async Task HandleControlAsync(NetworkStream stream, string json, CancellationToken token)
+    /// <summary>把驱动回调的震动写成 8 字节反向帧（协议 §6）。</summary>
+    private static async Task SendRumbleAsync(
+        NetworkStream stream, SemaphoreSlim writeLock, RumbleFrame frame)
+    {
+        try
+        {
+            var bytes = frame.Encode();
+            await writeLock.WaitAsync();
+            try
+            {
+                await stream.WriteAsync(bytes);
+                await stream.FlushAsync();
+            }
+            finally
+            {
+                writeLock.Release();
+            }
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+        {
+            // 连接已经断了，读循环会收尾。
+        }
+    }
+
+    /// <summary>控制通道的 JSON 消息（协议 §4）。当前只做最小握手与心跳。</summary>
+    private async Task HandleControlAsync(
+        NetworkStream stream,
+        string json,
+        IPEndPoint remote,
+        SemaphoreSlim writeLock,
+        CancellationToken token)
     {
         JsonElement root;
         try
@@ -190,11 +275,20 @@ public sealed class TcpInputServer : IDisposable
                     rate = ProtocolConstants.ActiveRateHz,
                     player = 0,
                     controller = controller ?? "xbox360",
-                }, token);
+                }, writeLock, token);
                 break;
 
             case "start":
-                await SendLineAsync(stream, new { v = ProtocolConstants.Version, type = "started", player = 0 }, token);
+                await SendLineAsync(
+                    stream,
+                    new { v = ProtocolConstants.Version, type = "started", player = 0 },
+                    writeLock,
+                    token);
+                break;
+
+            case "pong":
+                // 心跳应答：连接还在，只是没有输入。回收会话看这个时间，不看数据帧。
+                _registry.NoteAlive(remote);
                 break;
 
             case "bye":
@@ -207,11 +301,20 @@ public sealed class TcpInputServer : IDisposable
         }
     }
 
-    private static async Task SendLineAsync(NetworkStream stream, object payload, CancellationToken token)
+    private static async Task SendLineAsync(
+        NetworkStream stream, object payload, SemaphoreSlim writeLock, CancellationToken token)
     {
-        var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(payload) + "\n");
-        await stream.WriteAsync(bytes, token);
-        await stream.FlushAsync(token);
+        var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(payload) + (char)10);
+        await writeLock.WaitAsync(token);
+        try
+        {
+            await stream.WriteAsync(bytes, token);
+            await stream.FlushAsync(token);
+        }
+        finally
+        {
+            writeLock.Release();
+        }
     }
 
     public void Dispose() => _listener.Stop();

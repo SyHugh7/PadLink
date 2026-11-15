@@ -18,6 +18,12 @@ public sealed class UdpInputServer : IDisposable
     private readonly SessionRegistry _registry;
     private readonly bool _verbose;
 
+    /// <summary>
+    /// 按来源地址缓存震动发送委托，避免每帧（60Hz）新建闭包。
+    /// 只会在 UDP 接收循环线程里访问，不需要锁。
+    /// </summary>
+    private readonly Dictionary<IPEndPoint, Action<RumbleFrame>> _rumbleSinks = [];
+
     public UdpInputServer(int port, SessionRegistry registry, bool verbose = true)
     {
         _registry = registry;
@@ -71,11 +77,37 @@ public sealed class UdpInputServer : IDisposable
 
         try
         {
-            _registry.GetOrCreate(remote, frame).OnFrame(frame);
+            var session = _registry.GetOrCreate(remote, frame);
+            session.SetRumbleSink(RumbleSinkFor(remote));
+            session.OnFrame(frame);
         }
         catch (VirtualControllerException ex)
         {
             Console.WriteLine($"创建虚拟手柄失败：{ex.Message}");
+        }
+    }
+
+    private Action<RumbleFrame> RumbleSinkFor(IPEndPoint remote)
+    {
+        if (_rumbleSinks.TryGetValue(remote, out var sink)) return sink;
+
+        // 手机换端口重连时旧地址不会再用；攒到十几个就清一次，别让字典无限长。
+        if (_rumbleSinks.Count > 16) _rumbleSinks.Clear();
+
+        sink = frame => SendRumble(frame, remote);
+        _rumbleSinks[remote] = sink;
+        return sink;
+    }
+
+    private void SendRumble(RumbleFrame frame, IPEndPoint remote)
+    {
+        try
+        {
+            _socket.SendTo(frame.Encode(), remote);
+        }
+        catch (SocketException ex)
+        {
+            Console.WriteLine($"  震动回传失败 → {remote}：{ex.Message}");
         }
     }
 

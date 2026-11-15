@@ -59,13 +59,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        (application as PadLinkApplication).statusBar.onForeground()
+        val app = application as PadLinkApplication
+        app.statusBar.onForeground()
+        app.controller.onForeground()
     }
 
     override fun onStop() {
         val app = application as PadLinkApplication
+
+        // 先停重力，再考虑归零：传感器不停的话，下一次回调又会把倾角写回左摇杆，
+        // 后台就会继续发着倾斜的输入。开关状态不动，回前台接着用。
+        app.controller.onBackground()
         app.statusBar.onBackground()
         super.onStop()
+
         // 切走时主动归零，别让 PC 端还顶着油门。
         if (app.prefs.freezeOnBackground) app.controller.freezeInput()
     }
@@ -87,6 +94,9 @@ private fun PadLinkApp(app: PadLinkApplication) {
     LaunchedEffect(Unit) {
         controller.onHaptic = { duration ->
             if (app.prefs.hapticFeedback) app.haptics.tick(duration)
+        }
+        controller.onRumble = { left, right ->
+            if (app.prefs.rumbleEnabled) app.haptics.rumble(left, right)
         }
     }
 

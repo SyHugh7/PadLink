@@ -23,8 +23,8 @@ android {
         applicationId = "com.padlink.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 20
-        versionName = "0.8.5"
+        versionCode = 22
+        versionName = "1.0.0-rc1"
     }
 
     signingConfigs {
@@ -76,6 +76,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.ui:ui-tooling-preview")
 
     testImplementation("junit:junit:4.13.2")
