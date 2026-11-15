@@ -81,9 +81,8 @@ fun StickPad(
                                 track(hit.position)
                                 hit.consume()
                             } else {
-                                // 滑出空白时保持最后的值；只有抬手才释放。
-                                val stillDown = event.changes.any { it.id == activeId && it.pressed }
-                                if (!stillDown) release()
+                                // 滑出就归零；根手势会继续占住这根手指，不激活其他控件。
+                                release()
                             }
                         }
                     } finally {

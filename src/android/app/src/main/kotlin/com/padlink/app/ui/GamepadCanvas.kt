@@ -111,6 +111,7 @@ fun GamepadCanvas(
                     awaitPointerEventScope {
                         val active = mutableMapOf<PointerId, Int>()
                         val claimed = mutableMapOf<PointerId, RootHit>()
+                        val claimReleased = mutableSetOf<PointerId>()
                         val input = controller.input
 
                         fun bitAt(position: Offset): Int? {
@@ -352,6 +353,7 @@ fun GamepadCanvas(
                                     if (!change.pressed) {
                                         claim?.let { releaseClaim(it) }
                                         claimed.remove(change.id)
+                                        claimReleased.remove(change.id)
 
                                         active.remove(change.id)?.let {
                                             controller.setButton(it, false)
@@ -360,23 +362,20 @@ fun GamepadCanvas(
                                         continue
                                     }
 
-                                    // 这根手指已经被特殊控件占用：只更新它，滑过其他控件不响应。
+                                    // 这根手指已经被特殊控件占用：滑出就归零，但仍不激活其他控件。
                                     if (claim != null) {
-                                        when (claim) {
-                                            is RootHit.Stick ->
-                                                if (stickAt(change.position) == claim.left) {
-                                                    applyStick(claim.left, change.position)
-                                                }
+                                        val inside = when (claim) {
+                                            is RootHit.Stick -> stickAt(change.position) == claim.left
+                                            is RootHit.Trigger -> triggerAt(change.position) == claim.left
+                                            RootHit.DPad -> dpadAt(change.position)
+                                            is RootHit.Button -> false
+                                        }
 
-                                            is RootHit.Trigger ->
-                                                if (triggerAt(change.position) == claim.left) {
-                                                    applyTrigger(claim.left, change.position)
-                                                }
-
-                                            RootHit.DPad ->
-                                                if (dpadAt(change.position)) applyDpad(change.position)
-
-                                            is RootHit.Button -> Unit
+                                        if (inside) {
+                                            claimReleased.remove(change.id)
+                                            applyClaim(claim, change.position)
+                                        } else if (claimReleased.add(change.id)) {
+                                            releaseClaim(claim)
                                         }
                                         continue
                                     }
@@ -404,6 +403,7 @@ fun GamepadCanvas(
 
                                     if (continuous != null) {
                                         claimed[change.id] = continuous
+                                        claimReleased.remove(change.id)
                                         applyClaim(continuous, change.position)
                                     }
                                 }
@@ -413,6 +413,7 @@ fun GamepadCanvas(
                             claimed.values.forEach { releaseClaim(it) }
                             active.clear()
                             claimed.clear()
+                            claimReleased.clear()
                             rootPressed = emptySet()
                             rootStickLeft = null
                             rootStickRight = null
