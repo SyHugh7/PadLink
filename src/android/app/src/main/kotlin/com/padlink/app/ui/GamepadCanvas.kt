@@ -94,6 +94,11 @@ fun GamepadCanvas(
 
     // 根手势当前命中的离散按键；控件用它显示按下态，手指滑过时也能换键。
     var rootPressed by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var rootStickLeft by remember { mutableStateOf<Offset?>(null) }
+    var rootStickRight by remember { mutableStateOf<Offset?>(null) }
+    var rootTriggerLeft by remember { mutableStateOf<Float?>(null) }
+    var rootTriggerRight by remember { mutableStateOf<Float?>(null) }
+    var rootDpad by remember { mutableStateOf<DPad?>(null) }
 
     BoxWithConstraints(
         modifier.then(
@@ -239,9 +244,11 @@ fun GamepadCanvas(
                             val ny = (ly * scale / maxTravel).coerceIn(-1f, 1f)
 
                             if (left) {
+                                rootStickLeft = Offset(nx, ny)
                                 input.setStickEngaged(true)
                                 input.setLeftStick(nx, ny)
                             } else {
+                                rootStickRight = Offset(nx, ny)
                                 input.rightX = nx
                                 input.rightY = ny
                             }
@@ -250,9 +257,11 @@ fun GamepadCanvas(
 
                         fun clearStick(left: Boolean) {
                             if (left) {
+                                rootStickLeft = null
                                 input.setStickEngaged(false)
                                 input.setLeftStick(0f, 0f)
                             } else {
+                                rootStickRight = null
                                 input.rightX = 0f
                                 input.rightY = 0f
                             }
@@ -275,12 +284,24 @@ fun GamepadCanvas(
                                 ((fromTop - gateHeight) / travel).coerceIn(0f, 1f)
                             }
 
-                            if (left) input.leftTrigger = value else input.rightTrigger = value
+                            if (left) {
+                                rootTriggerLeft = value
+                                input.leftTrigger = value
+                            } else {
+                                rootTriggerRight = value
+                                input.rightTrigger = value
+                            }
                             controller.push()
                         }
 
                         fun clearTrigger(left: Boolean) {
-                            if (left) input.leftTrigger = 0f else input.rightTrigger = 0f
+                            if (left) {
+                                rootTriggerLeft = null
+                                input.leftTrigger = 0f
+                            } else {
+                                rootTriggerRight = null
+                                input.rightTrigger = 0f
+                            }
                             controller.push()
                         }
 
@@ -295,11 +316,13 @@ fun GamepadCanvas(
                                 directionFromDegrees(Math.toDegrees(atan2(-ly.toDouble(), lx.toDouble())))
                             }
 
+                            rootDpad = direction
                             input.dpad = direction
                             controller.push()
                         }
 
                         fun clearDpad() {
+                            rootDpad = null
                             input.dpad = DPad.NEUTRAL
                             controller.push()
                         }
@@ -371,6 +394,11 @@ fun GamepadCanvas(
                             triggerActive.clear()
                             dpadActive.clear()
                             rootPressed = emptySet()
+                            rootStickLeft = null
+                            rootStickRight = null
+                            rootTriggerLeft = null
+                            rootTriggerRight = null
+                            rootDpad = null
                         }
                     }
                 }
@@ -450,7 +478,17 @@ fun GamepadCanvas(
                             SubKeyEditor(element.kind, layout, selection, onSelectionChange, onLayoutChange)
 
                         editing -> ElementOutline(element, isSelected)
-                        element.enabled -> ElementContent(element, layout, controller, rootPressed)
+                        element.enabled -> ElementContent(
+                            element = element,
+                            layout = layout,
+                            controller = controller,
+                            rootPressed = rootPressed,
+                            rootStickLeft = rootStickLeft,
+                            rootStickRight = rootStickRight,
+                            rootTriggerLeft = rootTriggerLeft,
+                            rootTriggerRight = rootTriggerRight,
+                            rootDpad = rootDpad,
+                        )
                     }
                 }
             }
@@ -546,13 +584,18 @@ private fun ElementContent(
     layout: PadLayout,
     controller: PadLinkController,
     rootPressed: Set<Int>,
+    rootStickLeft: Offset?,
+    rootStickRight: Offset?,
+    rootTriggerLeft: Float?,
+    rootTriggerRight: Float?,
+    rootDpad: DPad?,
 ) {
     val input = controller.input
 
     when (element.kind) {
         PadElementKind.LEFT_STICK -> StickPad(
             modifier = Modifier.fillMaxSize(),
-            knobOverride = Offset(input.leftX, input.leftY),
+            knobOverride = rootStickLeft,
             onEngaged = {
                 input.setStickEngaged(it)
                 // 重力转向开着时，碰左摇杆是为了让位/微调，不震；L3 仍走 setButton。
@@ -565,7 +608,7 @@ private fun ElementContent(
 
         PadElementKind.RIGHT_STICK -> StickPad(
             Modifier.fillMaxSize(),
-            knobOverride = Offset(input.rightX, input.rightY),
+            knobOverride = rootStickRight,
             onEngaged = { if (it) controller.haptic(30) },
         ) { x, y ->
             input.rightX = x
@@ -576,7 +619,7 @@ private fun ElementContent(
         PadElementKind.DPAD -> when (layout.dpadStyle) {
             DPadStyle.COMBO -> DPadPad(
                 Modifier.fillMaxSize(),
-                activeOverride = input.dpad,
+                activeOverride = rootDpad,
                 onHaptic = { controller.haptic(it) },
             ) { direction ->
                 input.dpad = direction
@@ -600,7 +643,7 @@ private fun ElementContent(
             layout = layout,
             label = "LT",
             modifier = Modifier.fillMaxSize(),
-            valueOverride = input.leftTrigger,
+            valueOverride = rootTriggerLeft,
             onHaptic = { controller.haptic(it) },
         ) { value ->
             input.leftTrigger = value
@@ -611,7 +654,7 @@ private fun ElementContent(
             layout = layout,
             label = "RT",
             modifier = Modifier.fillMaxSize(),
-            valueOverride = input.rightTrigger,
+            valueOverride = rootTriggerRight,
             onHaptic = { controller.haptic(it) },
         ) { value ->
             input.rightTrigger = value
