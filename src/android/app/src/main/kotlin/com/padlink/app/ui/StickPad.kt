@@ -1,8 +1,6 @@
 package com.padlink.app.ui
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -12,6 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import com.padlink.app.ui.theme.LocalPadPalette
 import kotlin.math.min
@@ -35,10 +34,10 @@ fun StickPad(
         modifier = modifier
             .aspectRatio(1f)
             .pointerInput(Unit) {
-                awaitEachGesture {
-                    val first = awaitFirstDown()
+                awaitPointerEventScope {
                     val center = Offset(size.width / 2f, size.height / 2f)
-                    val maxTravel = min(size.width, size.height) / 2f * 0.62f
+                    val radius = min(size.width, size.height) / 2f
+                    val maxTravel = radius * 0.62f
 
                     fun track(position: Offset) {
                         val delta = position - center
@@ -53,22 +52,40 @@ fun StickPad(
                         onChange(knob.x, knob.y)
                     }
 
-                    onEngaged(true)
-                    track(first.position)
-                    first.consume()
+                    fun inCircle(position: Offset) = (position - center).getDistance() <= radius
 
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == first.id } ?: break
-                        if (!change.pressed) break
-                        track(change.position)
-                        change.consume()
+                    var activeId: PointerId? = null
+
+                    fun release() {
+                        activeId = null
+                        knob = Offset.Zero
+                        pressed = false
+                        onEngaged(false)
+                        onChange(0f, 0f)
                     }
 
-                    knob = Offset.Zero
-                    pressed = false
-                    onEngaged(false)
-                    onChange(0f, 0f)
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            // 手指当前还在圆盘内才算捏住；滑出去就松手。
+                            val hit = event.changes.firstOrNull {
+                                it.pressed && it.id == activeId && inCircle(it.position)
+                            } ?: event.changes.firstOrNull { it.pressed && inCircle(it.position) }
+
+                            if (hit != null) {
+                                if (activeId != hit.id) {
+                                    activeId = hit.id
+                                    onEngaged(true)
+                                }
+                                track(hit.position)
+                                hit.consume()
+                            } else {
+                                release()
+                            }
+                        }
+                    } finally {
+                        release()
+                    }
                 }
             },
     ) {

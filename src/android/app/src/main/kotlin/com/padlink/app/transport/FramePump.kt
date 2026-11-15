@@ -61,6 +61,8 @@ class FramePump(
         var nextTick = System.nanoTime()
         var sequence = 0L
         var sent = 0L
+        var lastStatsAt = SystemClock.elapsedRealtime()
+        var lastStatsSent = 0L
 
         try {
             while (true) {
@@ -71,8 +73,16 @@ class FramePump(
                 transport.send(frame)
                 sent++
 
-                // 约每 0.25 秒刷一次统计，让界面上的帧数看着在动。
-                if (sent % 15L == 0L) _stats.value = PumpStats(framesSent = sent)
+                // 约每 0.25 秒刷一次统计。界面显示的是实时帧率，不是累计帧数——
+                // 挂机半小时累计到十几万，那个数字对用户没有意义。
+                if (sent % 15L == 0L) {
+                    val now = SystemClock.elapsedRealtime()
+                    val elapsed = (now - lastStatsAt).coerceAtLeast(1L)
+                    val fps = ((sent - lastStatsSent) * 1000L / elapsed).toInt()
+                    _stats.value = PumpStats(framesSent = sent, framesPerSecond = fps)
+                    lastStatsAt = now
+                    lastStatsSent = sent
+                }
 
                 nextTick += intervalNanos
                 val sleepNanos = nextTick - System.nanoTime()
@@ -97,5 +107,6 @@ class FramePump(
 
 data class PumpStats(
     val framesSent: Long = 0,
+    val framesPerSecond: Int = 0,
     val lastError: String? = null,
 )

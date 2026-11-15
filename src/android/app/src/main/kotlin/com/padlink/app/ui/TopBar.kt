@@ -122,7 +122,7 @@ private fun statusOf(controller: PadLinkController): Pair<String, Color> {
     return when (val status = controller.status) {
         is LinkStatus.Idle -> "未连接" to scheme.error
         is LinkStatus.Connecting -> "连接中…" to scheme.tertiary
-        is LinkStatus.Connected -> "${status.describe} · ${controller.stats.framesSent} 帧" to scheme.primary
+        is LinkStatus.Connected -> "${status.describe} · ${controller.stats.framesPerSecond} fps" to scheme.primary
         is LinkStatus.Failed -> status.message to scheme.error
     }
 }

@@ -3,8 +3,6 @@ package com.padlink.app.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -23,6 +21,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -70,31 +69,26 @@ fun TriggerSlider(
     Box(modifier, contentAlignment = Alignment.TopCenter) {
         Canvas(
             modifier = Modifier.matchParentSize().pointerInput(gate) {
-                awaitEachGesture {
-                    val down = awaitFirstDown()
-                    pressed = true
-
-                    val gateFraction = gate.coerceIn(PadLayout.MIN_TRIGGER_GATE, PadLayout.MAX_TRIGGER_GATE)
-                    val gateHeight = (size.height * gateFraction).coerceIn(0f, size.height.toFloat())
-                    val travel = (size.height - gateHeight).coerceAtLeast(1f)
-
+                awaitPointerEventScope {
+                    var activeId: PointerId? = null
                     var firstSample = true
                     var inStrong = false
 
                     fun track(position: Offset) {
+                        val gateFraction = gate.coerceIn(PadLayout.MIN_TRIGGER_GATE, PadLayout.MAX_TRIGGER_GATE)
+                        val gateHeight = (size.height * gateFraction).coerceIn(0f, size.height.toFloat())
+                        val travel = (size.height - gateHeight).coerceAtLeast(1f)
                         val strong = position.y >= gateHeight
+
                         if (firstSample) {
-                            // 直接按在强加载区：30ms；按在弱加载区：20ms。
                             onHaptic(if (strong) 30L else 20L)
                             inStrong = strong
                             firstSample = false
                         } else if (strong != inStrong) {
-                            // 跨过强弱分界，两个方向都只给 20ms。
                             onHaptic(20L)
                             inStrong = strong
                         }
 
-                        // 顶端那段：算按下，但值恒为 0；过了它才按位置换算。
                         value = if (position.y < gateHeight) {
                             0f
                         } else {
@@ -103,21 +97,42 @@ fun TriggerSlider(
                         onChange(value)
                     }
 
-                    try {
-                        track(down.position)
-                        down.consume()
+                    fun inBar(position: Offset) =
+                        position.x in 0f..size.width.toFloat() &&
+                            position.y in 0f..size.height.toFloat()
 
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            if (!change.pressed) break
-                            track(change.position)
-                            change.consume()
-                        }
-                    } finally {
+                    fun release() {
+                        activeId = null
+                        firstSample = true
+                        inStrong = false
                         value = 0f
                         pressed = false
                         onChange(0f)
+                    }
+
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            // 手指当前还在长条内才算抓住扳机；滑出去就归零。
+                            val hit = event.changes.firstOrNull {
+                                it.pressed && it.id == activeId && inBar(it.position)
+                            } ?: event.changes.firstOrNull { it.pressed && inBar(it.position) }
+
+                            if (hit != null) {
+                                if (activeId != hit.id) {
+                                    activeId = hit.id
+                                    firstSample = true
+                                    inStrong = false
+                                    pressed = true
+                                }
+                                track(hit.position)
+                                hit.consume()
+                            } else {
+                                release()
+                            }
+                        }
+                    } finally {
+                        release()
                     }
                 }
             },

@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
@@ -412,25 +413,46 @@ private fun TriangleKey(
     Box(
         modifier = modifier
             .pointerInput(Unit) {
-                awaitEachGesture {
-                    val first = awaitFirstDown()
-                    down = true
-                    onPressChange(true)
-                    first.consume()
+                awaitPointerEventScope {
+                    var pressedBy: PointerId? = null
 
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == first.id } ?: break
-                        if (!change.pressed) break
-                        change.consume()
+                    fun release() {
+                        if (pressedBy != null) {
+                            pressedBy = null
+                            down = false
+                            onPressChange(false)
+                        }
                     }
 
-                    down = false
-                    onPressChange(false)
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            // 只看当前手指是否还在圆形区域内，滑出就释放。
+                            val hit = event.changes.firstOrNull { change ->
+                                change.pressed &&
+                                    (change.position - Offset(size.width / 2f, size.height / 2f))
+                                        .getDistance() <= minOf(size.width, size.height) / 2f
+                            }
+
+                            if (hit != null) {
+                                if (pressedBy == null) {
+                                    down = true
+                                    onPressChange(true)
+                                }
+                                pressedBy = hit.id
+                                hit.consume()
+                            } else {
+                                release()
+                            }
+                        }
+                    } finally {
+                        release()
+                    }
                 }
+
             }
             .drawBehind {
-                val radius = size.minDimension / 2f
+                val radius = minOf(size.width, size.height) / 2f
                 val center = Offset(size.width / 2f, size.height / 2f)
 
                 drawCircle(color = if (down) colors.facePressed else colors.face, radius = radius, center = center)

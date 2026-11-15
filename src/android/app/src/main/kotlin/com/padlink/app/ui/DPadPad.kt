@@ -1,8 +1,6 @@
 package com.padlink.app.ui
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -13,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import com.padlink.app.ui.theme.LocalPadPalette
 import com.padlink.core.DPad
@@ -39,10 +38,11 @@ fun DPadPad(
         modifier = modifier
             .aspectRatio(1f)
             .pointerInput(Unit) {
-                awaitEachGesture {
-                    val down = awaitFirstDown()
+                awaitPointerEventScope {
                     val center = Offset(size.width / 2f, size.height / 2f)
-                    val deadZone = min(size.width, size.height) * 0.16f
+                    val radius = min(size.width, size.height) / 2f
+                    val deadZone = radius * 0.32f
+                    var activeId: PointerId? = null
                     var lastDirection = DPad.NEUTRAL
 
                     fun track(position: Offset) {
@@ -62,19 +62,37 @@ fun DPadPad(
                         onDirection(direction)
                     }
 
-                    track(down.position)
-                    down.consume()
+                    fun inCircle(position: Offset) =
+                        hypot(position.x - center.x, position.y - center.y) <= radius
 
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) break
-                        track(change.position)
-                        change.consume()
+                    fun release() {
+                        activeId = null
+                        lastDirection = DPad.NEUTRAL
+                        active = DPad.NEUTRAL
+                        onDirection(DPad.NEUTRAL)
                     }
 
-                    active = DPad.NEUTRAL
-                    onDirection(DPad.NEUTRAL)
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val hit = event.changes.firstOrNull {
+                                it.pressed && it.id == activeId && inCircle(it.position)
+                            } ?: event.changes.firstOrNull { it.pressed && inCircle(it.position) }
+
+                            if (hit != null) {
+                                if (activeId != hit.id) {
+                                    activeId = hit.id
+                                    lastDirection = DPad.NEUTRAL
+                                }
+                                track(hit.position)
+                                hit.consume()
+                            } else {
+                                release()
+                            }
+                        }
+                    } finally {
+                        release()
+                    }
                 }
             },
     ) {

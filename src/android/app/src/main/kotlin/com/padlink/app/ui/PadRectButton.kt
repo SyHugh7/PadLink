@@ -1,7 +1,5 @@
 package com.padlink.app.ui
 
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -14,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -38,21 +37,40 @@ fun PadRectButton(
     Box(
         modifier = modifier
             .pointerInput(Unit) {
-                awaitEachGesture {
-                    val first = awaitFirstDown()
-                    pressed = true
-                    onPressChange(true)
-                    first.consume()
+                awaitPointerEventScope {
+                    var pressedBy: PointerId? = null
 
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == first.id } ?: break
-                        if (!change.pressed) break
-                        change.consume()
+                    fun release() {
+                        if (pressedBy != null) {
+                            pressedBy = null
+                            pressed = false
+                            onPressChange(false)
+                        }
                     }
 
-                    pressed = false
-                    onPressChange(false)
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val hit = event.changes.firstOrNull { change ->
+                                change.pressed &&
+                                    change.position.x in 0f..size.width.toFloat() &&
+                                    change.position.y in 0f..size.height.toFloat()
+                            }
+
+                            if (hit != null) {
+                                if (pressedBy == null) {
+                                    pressed = true
+                                    onPressChange(true)
+                                }
+                                pressedBy = hit.id
+                                hit.consume()
+                            } else {
+                                release()
+                            }
+                        }
+                    } finally {
+                        release()
+                    }
                 }
             }
             .drawBehind {
