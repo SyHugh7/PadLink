@@ -110,9 +110,7 @@ fun GamepadCanvas(
                 Modifier.pointerInput(Unit) {
                     awaitPointerEventScope {
                         val active = mutableMapOf<PointerId, Int>()
-                        val stickActive = mutableMapOf<PointerId, Boolean>()
-                        val triggerActive = mutableMapOf<PointerId, Boolean>()
-                        val dpadActive = mutableSetOf<PointerId>()
+                        val claimed = mutableMapOf<PointerId, RootHit>()
                         val input = controller.input
 
                         fun bitAt(position: Offset): Int? {
@@ -327,11 +325,63 @@ fun GamepadCanvas(
                             controller.push()
                         }
 
+                        fun applyClaim(hit: RootHit, position: Offset) {
+                            when (hit) {
+                                is RootHit.Stick -> applyStick(hit.left, position)
+                                is RootHit.Trigger -> applyTrigger(hit.left, position)
+                                RootHit.DPad -> applyDpad(position)
+                                is RootHit.Button -> Unit
+                            }
+                        }
+
+                        fun releaseClaim(hit: RootHit) {
+                            when (hit) {
+                                is RootHit.Stick -> clearStick(hit.left)
+                                is RootHit.Trigger -> clearTrigger(hit.left)
+                                RootHit.DPad -> clearDpad()
+                                is RootHit.Button -> Unit
+                            }
+                        }
+
                         try {
                             while (true) {
                                 val event = awaitPointerEvent()
                                 for (change in event.changes) {
-                                    val buttonNext = if (change.pressed) bitAt(change.position) else null
+                                    val claim = claimed[change.id]
+
+                                    if (!change.pressed) {
+                                        claim?.let { releaseClaim(it) }
+                                        claimed.remove(change.id)
+
+                                        active.remove(change.id)?.let {
+                                            controller.setButton(it, false)
+                                            rootPressed = active.values.toSet()
+                                        }
+                                        continue
+                                    }
+
+                                    // 这根手指已经被特殊控件占用：只更新它，滑过其他控件不响应。
+                                    if (claim != null) {
+                                        when (claim) {
+                                            is RootHit.Stick ->
+                                                if (stickAt(change.position) == claim.left) {
+                                                    applyStick(claim.left, change.position)
+                                                }
+
+                                            is RootHit.Trigger ->
+                                                if (triggerAt(change.position) == claim.left) {
+                                                    applyTrigger(claim.left, change.position)
+                                                }
+
+                                            RootHit.DPad ->
+                                                if (dpadAt(change.position)) applyDpad(change.position)
+
+                                            is RootHit.Button -> Unit
+                                        }
+                                        continue
+                                    }
+
+                                    val buttonNext = bitAt(change.position)
                                     val buttonPrev = active[change.id]
                                     if (buttonNext != buttonPrev) {
                                         buttonPrev?.let { controller.setButton(it, false) }
@@ -339,60 +389,30 @@ fun GamepadCanvas(
                                         if (buttonNext == null) active.remove(change.id) else active[change.id] = buttonNext
                                         rootPressed = active.values.toSet()
                                     }
-
-                                    if (!change.pressed) {
-                                        stickActive.remove(change.id)?.let { clearStick(it) }
-                                        triggerActive.remove(change.id)?.let { clearTrigger(it) }
-                                        if (dpadActive.remove(change.id)) clearDpad()
-                                        continue
-                                    }
-
-                                    // 按在离散按键上时，连续控件让位。
-                                    if (buttonNext != null) {
-                                        stickActive.remove(change.id)?.let { clearStick(it) }
-                                        triggerActive.remove(change.id)?.let { clearTrigger(it) }
-                                        if (dpadActive.remove(change.id)) clearDpad()
-                                        continue
-                                    }
+                                    if (buttonNext != null) continue
 
                                     val stick = stickAt(change.position)
                                     val trigger = if (stick == null) triggerAt(change.position) else null
                                     val onDpad = stick == null && trigger == null && dpadAt(change.position)
 
-                                    if (stick != null) {
-                                        if (stickActive[change.id] != stick) {
-                                            stickActive[change.id]?.let { clearStick(it) }
-                                            stickActive[change.id] = stick
-                                        }
-                                        triggerActive.remove(change.id)?.let { clearTrigger(it) }
-                                        if (dpadActive.remove(change.id)) clearDpad()
-                                        applyStick(stick, change.position)
-                                    } else if (trigger != null) {
-                                        stickActive.remove(change.id)?.let { clearStick(it) }
-                                        if (triggerActive[change.id] != trigger) {
-                                            triggerActive[change.id]?.let { clearTrigger(it) }
-                                            triggerActive[change.id] = trigger
-                                        }
-                                        if (dpadActive.remove(change.id)) clearDpad()
-                                        applyTrigger(trigger, change.position)
-                                    } else if (onDpad) {
-                                        stickActive.remove(change.id)?.let { clearStick(it) }
-                                        triggerActive.remove(change.id)?.let { clearTrigger(it) }
-                                        dpadActive.add(change.id)
-                                        applyDpad(change.position)
+                                    val continuous = when {
+                                        stick != null -> RootHit.Stick(stick)
+                                        trigger != null -> RootHit.Trigger(trigger)
+                                        onDpad -> RootHit.DPad
+                                        else -> null
                                     }
-                                    // 滑到空白：连续控件保持最后的值，直到抬手。
+
+                                    if (continuous != null) {
+                                        claimed[change.id] = continuous
+                                        applyClaim(continuous, change.position)
+                                    }
                                 }
                             }
                         } finally {
                             active.values.forEach { controller.setButton(it, false) }
-                            stickActive.values.forEach { clearStick(it) }
-                            triggerActive.values.forEach { clearTrigger(it) }
-                            if (dpadActive.isNotEmpty()) clearDpad()
+                            claimed.values.forEach { releaseClaim(it) }
                             active.clear()
-                            stickActive.clear()
-                            triggerActive.clear()
-                            dpadActive.clear()
+                            claimed.clear()
                             rootPressed = emptySet()
                             rootStickLeft = null
                             rootStickRight = null
